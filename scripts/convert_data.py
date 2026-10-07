@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import csv, json, re, os
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "input" / "full"
-OUT = ROOT / "public" / "static" / "data"
+SRC = "/home/user/uploaded_files/full"
+OUT = "/home/user/webapp/public/static/data"
 os.makedirs(OUT, exist_ok=True)
 
 # ---------- 単語 ----------

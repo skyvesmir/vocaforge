@@ -47,26 +47,15 @@
     if (useLeapWords()) return Math.ceil(DATA.wordsLeap.length / 100);
     return useFullWords() ? (m.words_full_sections || 53) : (m.word_sections || 19);
   }
-  // 全部バージョンの遅延ロード。
-  // GitHub上の単一ファイル容量制約を避けるため、9個のJSONパートを並列取得して結合する。
+  // 全部バージョンの遅延ロード（5MBのため必要時のみ）
   async function loadFullWords() {
     if (DATA.wordsFull) return true;
     try {
-      const urls = Array.from({ length: 9 }, (_, i) =>
-        '/static/data/words_full.part' + String(i + 1).padStart(2, '0') + '.json'
-      );
-      const parts = await Promise.all(urls.map(async (url) => {
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + url);
-        return r.json();
-      }));
-      DATA.wordsFull = parts.flat();
+      const r = await fetch('/static/data/words_full.json');
+      DATA.wordsFull = await r.json();
       migrateSharedIds();
       return true;
-    } catch (e) {
-      console.error('[VF] failed to load full vocabulary dataset:', e);
-      return false;
-    }
+    } catch (e) { return false; }
   }
   // Leapモードの遅延ロード（全部DB + Leap順序リスト）。
   // カードIDは全部DBと同一なので学習進捗は全モードで共有される。

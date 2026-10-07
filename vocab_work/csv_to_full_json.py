@@ -10,12 +10,10 @@
    同じ単語は同じカードとして学習進捗が共有される。
 """
 import csv, json, math
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / 'vocab_work' / 'vocab_final.csv'
-EXTRA = ROOT / 'vocab_work' / 'extra_words.csv'
-DATA_DIR = ROOT / 'public' / 'static' / 'data'
+SRC = '/home/user/uploaded_files/vocab_final_corrected.csv'
+EXTRA = '/home/user/webapp/vocab_work/extra_words.csv'
+DATA_DIR = '/home/user/webapp/vocaforge/public/static/data'
 
 def read_csv(path):
     rows = list(csv.reader(open(path, encoding='utf-8-sig')))

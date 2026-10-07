@@ -93,8 +93,6 @@
 
 VocaForgeは独立した学習Webアプリとして、このリポジトリで開発・公開しています。
 
-`words_full.json`（全部バージョン6559語）はGitHubのファイル容量制約を避けるため、`public/static/data/words_full.part01.json`〜`part09.json`に分割して保存し、アプリ側で自動結合します。
-
 ## デプロイ
 - **プラットフォーム**: Cloudflare Pages
 - **ステータス**: ✅ 本番稼働中
