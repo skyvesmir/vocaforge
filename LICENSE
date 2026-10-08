@@ -4,10 +4,14 @@ Copyright (c) 2026 Sky Vesmir
 
 Scope
 -----
-This license applies only to the VocaForge source code in this directory,
-excluding:
+This license applies to the source code in this repository and to the
+etymology dataset `public/static/data/etymology.json`, excluding:
 
-- datasets and other data files under `public/static/data/`
+- vocabulary and phrase datasets and related working files (including the
+  other files under `public/static/data/` and the files under `vocab_work/`).
+  These are included for the author's personal study use only, and are NOT
+  licensed for reuse or redistribution under this license. All rights in them
+  remain with their respective rights holders.
 - third-party libraries, fonts, images, and other third-party materials
 - any other material explicitly identified as being under different terms
 
