@@ -6,11 +6,8 @@
 
 **デモ**: https://vocaforgestudyedition.pages.dev/
 
-<!--
-スクリーンショットを docs/images/ に置いたら、このコメントを外して表示する:
 ![ホーム画面](docs/images/home.png)
 ![解答後に出る語源チップ](docs/images/etymology-chip.png)
--->
 
 ## 特徴
 
