@@ -1,5 +1,5 @@
 {
-  "name": "webapp",
+  "name": "vocaforge",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,5 +16,6 @@
     "@hono/vite-dev-server": "^0.25.2",
     "vite": "^6.3.5",
     "wrangler": "^4.4.0"
-  }
+  },
+  "license": "MIT"
 }
