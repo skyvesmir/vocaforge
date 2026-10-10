@@ -22,8 +22,10 @@
     // 難易度・安定度が実際の記憶状態とズレたりする。
     // そのため、このモードでは FSRS のスケジューリングと最適化用ログを書かない。
     //   反映しない: stability / difficulty / due / state / last_review / 最適化ログ
-    //   反映する  : reps / lapses / is_leech（弱点リストの選抜と統計に必要なため。
-    //               ここを止めると弱点判定が更新されず、リストから卒業できなくなる）
+    //   反映する  : reps / lapses（回数の記録）
+    // リーチ判定は FSRS の状態（reps と stability）で決まる（FSRS.isLeech）。
+    // ドリルでは stability を動かさないので、ドリルの解答でリーチから外れることはない。
+    // リーチから外れるのは、通常の復習で安定度が伸びたとき。
     const isWeakDrill = s.deck === 'weak';
 
     const before = Store.getCard(card.id) || { state: 'new', stability: 0, difficulty: 0, reps: 0, lapses: 0 };
@@ -32,8 +34,6 @@
 
     const reps = (before.reps || 0) + 1;
     const lapses = (before.lapses || 0) + (grade === 1 ? 1 : 0);
-    const leechThr = s.settings.leechThreshold || 8;
-    const isLeech = lapses >= leechThr;
 
     const newState = isWeakDrill
       // 弱点ドリル: FSRS が決める4項目（state/stability/difficulty/due）と
@@ -41,7 +41,7 @@
       ? {
         state: before.state, stability: before.stability, difficulty: before.difficulty,
         due: before.due, last_review: before.last_review,
-        reps, lapses, is_leech: isLeech,
+        reps, lapses,
         deck: card.deck, group: card.group,
         // last_review を据え置くので、cardTouchedAt() が「古いカード」と誤判定してしまう
         // （updated_at_ms が無いと last_review で代用する仕様のため）。
@@ -52,9 +52,11 @@
       : {
         state: res.state, stability: res.stability, difficulty: res.difficulty,
         due: res.due, last_review: res.last_review,
-        reps, lapses, is_leech: isLeech,
+        reps, lapses,
         deck: card.deck, group: card.group
       };
+    // リーチ判定は更新後の FSRS 状態（reps / stability）から決める。
+    newState.is_leech = FSRS.isLeech(newState);
     Store.setCard(card.id, newState);
 
     // ログ（FSRS最適化用フル情報）

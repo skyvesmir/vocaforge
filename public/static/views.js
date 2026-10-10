@@ -75,7 +75,7 @@
         miniStat('保持率', st.retention == null ? '—' : st.retention + '%', 'fa-bullseye') +
       '</div>' +
 
-      // 弱点集中モード（リーチ語・高難易度語のドリル）
+      // 弱点集中モード（リーチ語のドリル）
       (function () {
         const n = window.__weakCount ? window.__weakCount() : 0;
         if (!n) return '';

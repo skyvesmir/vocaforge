@@ -29,7 +29,7 @@
       learned.push({
         term: c.term, meaning: c.meaning, deck: c.deck,
         lapses: s.lapses || 0,
-        leech: !!s.is_leech,
+        leech: FSRS.isLeech(s),
         diff: s.difficulty || 0,
         stab: s.stability || 0,
         state: s.state,

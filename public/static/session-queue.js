@@ -4,7 +4,7 @@
  * - reviewPerDay / newPerDay の上限適用
  * - セクション選択時の新規上限の例外
  * - 出題ゼロ時のフォールバック
- * - 弱点集中モードの対象抽出
+ * - 弱点集中モードの対象抽出（リーチ語のみ）
  */
 (function () {
   'use strict';
@@ -97,9 +97,12 @@
   }
 
   // ====== 弱点集中モード（ブートキャンプ） ======
-  // 対象: 学習済みカードのうち「リーチ語 / 失敗が多い / FSRS難易度が高い」もの。
+  // 対象: リーチ語だけ。リーチかどうかは FSRS.isLeech()（復習回数と安定度）で判定する。
+  // 保存済みの is_leech フラグは読まない（旧判定=間違い回数の古い値が残っているため）。
   // 復習期限に関係なく、最も弱い順に最大 WEAK_SESSION_SIZE 枚をドリル出題する。
-  // 採点は通常と同じくFSRSに反映（早期復習はFSRSがelapsed_daysで正しく扱う）。
+  // 並び: 安定度が低い順（記憶が最も持たないカードから）、同じなら難易度が高い順。
+  // このモードの解答は FSRS の状態を変えない（session-answer.js 参照）ので、
+  // リーチから外れるのは、通常の復習で安定度が伸びたときだけ。
   const WEAK_SESSION_SIZE = 15;
   function weakPool() {
     const states = Store.getAllCards();
@@ -108,16 +111,10 @@
     for (let i = 0; i < all.length; i++) {
       const c = all[i];
       const s = states[c.id];
-      if (!s || s.state === 'new') continue;
-      const lapses = s.lapses || 0;
-      const diff = s.difficulty || 0;
-      const leech = !!s.is_leech;
-      // 弱点判定: リーチ or 失敗2回以上 or 難易度6.5以上（FSRS Dは1-10）
-      if (!leech && lapses < 2 && diff < 6.5) continue;
-      // 弱さスコア: リーチ最優先 → 失敗回数 → 難易度
-      out.push({ c, score: (leech ? 1000 : 0) + lapses * 10 + diff });
+      if (!FSRS.isLeech(s)) continue;
+      out.push({ c, stab: s.stability || 0, diff: s.difficulty || 0 });
     }
-    out.sort((a, b) => b.score - a.score);
+    out.sort((a, b) => (a.stab - b.stab) || (b.diff - a.diff));
     return out.map(x => x.c);
   }
   window.__weakCount = function () { return weakPool().length; };

@@ -17,7 +17,8 @@
  *
  * Grade: 1=Again 2=Hard 3=Good 4=Easy
  * 公開API: window.FSRS = { schedule, preview, retrievability, intervalFromStability,
- *                          setWeights, getWeights, defaultWeights, makeEngine }
+ *                          setWeights, getWeights, defaultWeights, makeEngine,
+ *                          isLeech, LEECH }
  */
 (function (global) {
   'use strict';
@@ -232,11 +233,35 @@
     return out;
   }
 
+  // ---- リーチ（苦手カード）判定: FSRS の記憶状態だけで決める ----
+  // 「何回復習しても記憶が定着しない」カードをリーチとする。
+  //   復習回数が minReps 回以上 かつ 安定度 S が maxStability 日未満。
+  //
+  // 難易度 D は判定に使わない。D は「もう一度」を1回押しただけで約8.4まで跳ね上がり、
+  // その後は1回の復習で約1%しか戻らない（nextDifficulty の平均回帰）。
+  // 1回ミスしたカードが10回以上復習した後も D≈8 のままになるため、リーチの指標にならない。
+  // 一方 S は、失敗するたびに押し下げられ、成功を重ねれば伸びるので、
+  // 「一時的なミス」と「慢性的な苦戦」を区別できる。
+  //
+  // minReps=5 は、新規カードを同日中にやり直しているだけの段階（S が小さいのが普通）を
+  // リーチと誤判定しないため。maxStability=1 は「想起確率90%を保てるのが1日未満」の意味。
+  // 値を変えるときは、fsrs.js をそのまま Node で実行して、Again/Good 交互・Again連続・
+  // Hard連打・新規の同日やり直しなどのカードで (reps, S) の推移を確認すること。
+  const LEECH = { minReps: 5, maxStability: 1 };
+  function isLeech(card) {
+    if (!card || card.state === 'new' || card.state == null) return false;
+    const reps = Number(card.reps);
+    const S = Number(card.stability);
+    if (!isFinite(reps) || !isFinite(S)) return false;
+    return reps >= LEECH.minReps && S < LEECH.maxStability;
+  }
+
   global.FSRS = {
     schedule, preview,
     retrievability: (t, S) => engine.retrievability(t, S),
     intervalFromStability: (S, r) => engine.intervalFromStability(S, r),
     setWeights, getWeights, makeEngine,
+    isLeech, LEECH,
     defaultWeights: DEFAULT_W.slice(),
     version: 7, weights: W
   };

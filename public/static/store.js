@@ -186,7 +186,7 @@
     interleave: true,
     strictInput: false,    // 入力採点: trueで完全一致, falseで正規化緩め
     formats: { 'mc-ej': true, 'mc-je': true, 'type-je': true, 'cloze': true }, // 有効な出題形式（cloze=例文穴埋め・復習用）
-    leechThreshold: 8,
+    leechThreshold: 8,     // 旧設定（間違い回数での判定用）。現在は未使用。リーチは FSRS.isLeech() で判定する
     sectionNewLimit: 50, // セクション明示選択時の1回あたり新規カード数（下限10）
     wordDataset: 'target1900', // 単語DB: 'target1900'(1900語) | 'full'(発音/品詞/例文付き) | 'leap'
     phraseDataset: 'target1000' // 熟語DB: 'target1000'(1000熟語) | 'full'(3238熟語・補足/例文付き)
@@ -251,19 +251,18 @@
   }
   // サーバー行（card_states）を手元のカード状態の形に直す。
   // ・deck / group はサーバーに列が無い付随情報なので、手元にあれば引き継ぐ
-  // ・is_leech もサーバーに列が無いので lapses と閾値から作り直す
-  function adoptRemoteCard(b, localPrev, leechThr) {
+  // ・is_leech もサーバーに列が無いので FSRS 状態（reps / stability）から作り直す
+  function adoptRemoteCard(b, localPrev) {
     const n = (v) => { const x = Number(v); return isFinite(x) ? x : 0; };
-    const lapses = n(b.lapses);
     const out = {
       state: b.state || 'new',
       stability: n(b.stability), difficulty: n(b.difficulty),
       due: n(b.due), last_review: n(b.last_review),
-      reps: n(b.reps), lapses: lapses,
-      is_leech: lapses >= (leechThr || 8),
+      reps: n(b.reps), lapses: n(b.lapses),
       suspended: !!b.suspended,
       updated_at_ms: cardTouchedAt(b)
     };
+    out.is_leech = FSRS.isLeech(out);
     if (localPrev && typeof localPrev === 'object') {
       if (localPrev.deck !== undefined) out.deck = localPrev.deck;
       if (localPrev.group !== undefined) out.group = localPrev.group;
@@ -634,7 +633,8 @@
       allCardIds.forEach(id => {
         const c = cards[id];
         if (!c || c.state === 'new') { nNew++; return; }
-        if (c.is_leech) nLeech++;
+        // 保存済みの is_leech は旧判定（間違い回数）の古い値が残るので、FSRS 状態から数える
+        if (FSRS.isLeech(c)) nLeech++;
         if (c.state === 'relearning') { nLearning++; return; }
         if (c.stability >= 21) nMature++; else nReview++;
       });
@@ -739,7 +739,6 @@
       const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
       const rc = isObj(remoteCards) ? remoteCards : {};
       const local = load(K.cards, {});
-      const leechThr = this.getSettings().leechThreshold || 8;
       let fromServer = 0, localNewer = 0, added = 0, same = 0, localOnly = 0;
       const toPush = [];
       const out = {};
@@ -751,10 +750,10 @@
           out[id] = a; localOnly++; toPush.push(id); return;
         }
         if (!a) {                       // サーバーにしかない → 取得する
-          out[id] = adoptRemoteCard(b, null, leechThr); added++; return;
+          out[id] = adoptRemoteCard(b, null); added++; return;
         }
         const ta = cardTouchedAt(a), tb = cardTouchedAt(b);
-        if (tb > ta) { out[id] = adoptRemoteCard(b, a, leechThr); fromServer++; return; }
+        if (tb > ta) { out[id] = adoptRemoteCard(b, a); fromServer++; return; }
         if (ta > tb) { out[id] = a; localNewer++; toPush.push(id); return; }
         out[id] = a; same++;            // 完全に同じ時刻 → 何もしない
       });
