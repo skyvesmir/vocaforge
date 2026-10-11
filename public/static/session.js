@@ -128,8 +128,8 @@
     if (q.format === 'cloze') {
       body =
         '<div class="text-center mb-6"><div class="text-xs text-slate-400 mb-2">例文の空欄に入る英語は？</div>' +
-        '<div class="text-xl font-bold leading-relaxed text-left bg-slate-900 border border-slate-800 rounded-xl px-4 py-4">' + esc(q.prompt) + '</div>' +
-        (q.promptJa ? '<div class="text-sm text-slate-400 mt-3 text-left px-1"><i class="fas fa-language mr-1.5"></i>' + esc(q.promptJa) + '</div>' : '') +
+        '<div class="text-xl font-bold leading-relaxed text-left bg-slate-900 border border-slate-800 rounded-xl px-4 py-4">' + br(q.prompt) + '</div>' +
+        (q.promptJa ? '<div class="text-sm text-slate-400 mt-3 text-left px-1"><i class="fas fa-language mr-1.5"></i>' + br(q.promptJa) + '</div>' : '') +
         deckBadge +
         '</div>' +
         typeControls('空欄の英語を入力…', osk);
@@ -414,8 +414,9 @@
     const clozeBlock = (q.format === 'cloze' && card.example)
       ? '<div class="mt-2 text-sm text-slate-300 bg-slate-800/50 rounded-lg px-3 py-2">' +
           esc(card.example).replace(new RegExp('(' + esc(q.answer).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'i'),
-            '<span class="text-emerald-300 font-bold underline decoration-emerald-500/60">$1</span>') +
-          (card.exampleJa ? '<div class="text-xs text-slate-400 mt-1">' + esc(card.exampleJa) + '</div>' : '') +
+            '<span class="text-emerald-300 font-bold underline decoration-emerald-500/60">$1</span>')
+            .replace(/&lt;br&gt;/gi, '<br>') +
+          (card.exampleJa ? '<div class="text-xs text-slate-400 mt-1">' + br(card.exampleJa) + '</div>' : '') +
         '</div>'
       : '';
 
