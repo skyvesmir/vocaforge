@@ -121,6 +121,9 @@
     // 英単語/英熟語タグ：問題文の直下に大きめに表示（わかりやすく）
     const deckBadge = '<div class="flex justify-center mt-3"><span class="inline-flex items-center gap-1.5 text-sm font-bold px-3.5 py-1 rounded-full border ' + tagColor + '"><i class="fas ' + tagIcon + ' text-xs"></i>' + tag + '</span></div>';
 
+    // 記入式で画面キーボードを使うか（タッチ端末 かつ 設定ON）
+    const osk = (q.format === 'cloze' || q.format === 'type-je') && useOnScreenKeyboard(s);
+
     let body;
     if (q.format === 'cloze') {
       body =
@@ -129,10 +132,7 @@
         (q.promptJa ? '<div class="text-sm text-slate-400 mt-3 text-left px-1"><i class="fas fa-language mr-1.5"></i>' + esc(q.promptJa) + '</div>' : '') +
         deckBadge +
         '</div>' +
-        '<input id="type-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" ' +
-        'placeholder="空欄の英語を入力…" class="w-full bg-slate-900 border-2 border-slate-700 focus:border-brand rounded-xl px-4 py-4 text-lg text-center focus:outline-none">' +
-        '<button id="type-submit" class="mt-4 w-full bg-brand hover:bg-brand-dark text-white font-bold rounded-xl py-3.5 active:scale-95 transition">解答する</button>' +
-        '<button id="type-dontknow" class="mt-2 w-full text-slate-400 text-sm py-2">わからない</button>';
+        typeControls('空欄の英語を入力…', osk);
     } else if (q.format === 'type-je') {
       body =
         '<div class="text-center mb-6"><div class="text-xs text-slate-400 mb-2">この意味の英語は？</div>' +
@@ -140,10 +140,7 @@
         (q.sub ? '<div class="text-xs text-slate-400 mt-2"><i class="fas fa-lightbulb mr-1"></i>' + esc(q.sub) + '</div>' : '') +
         deckBadge +
         '</div>' +
-        '<input id="type-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" ' +
-        'placeholder="英語を入力…" class="w-full bg-slate-900 border-2 border-slate-700 focus:border-brand rounded-xl px-4 py-4 text-lg text-center focus:outline-none">' +
-        '<button id="type-submit" class="mt-4 w-full bg-brand hover:bg-brand-dark text-white font-bold rounded-xl py-3.5 active:scale-95 transition">解答する</button>' +
-        '<button id="type-dontknow" class="mt-2 w-full text-slate-400 text-sm py-2">わからない</button>';
+        typeControls('英語を入力…', osk);
     } else {
       const promptBig = q.format === 'mc-ej'
         ? '<div class="text-3xl font-extrabold">' + esc(q.prompt) + '</div>'
@@ -158,19 +155,162 @@
     }
 
     app.innerHTML = head +
-      '<div class="max-w-xl mx-auto px-4 pt-4 pb-8">' +
+      '<div id="sess-body" class="max-w-xl mx-auto px-4 pt-4 pb-8">' +
         '<div class="flex items-center gap-2 justify-center mb-5">' + fmtBadge + '</div>' +
         body +
         '<div id="feedback"></div>' +
-      '</div>';
+      '</div>' +
+      (osk ? keyboardHtml(q.format === 'cloze' ? '空欄の英語を入力…' : '英語を入力…') : '');
 
+    // 前の問題で下にスクロールしていても、新しい問題は先頭から表示する
+    if (osk && window.scrollY) window.scrollTo(0, 0);
     bindQuestion(q, card);
+  }
+
+  // ====== 画面キーボード ======
+  // タッチ端末では OS のキーボードを出さず、画面下に固定した自前キーボードで入力する。
+  // OS のキーボードは出し入れのたびに画面の高さが変わり、問題が上下に動くため。
+  // PC など物理キーボードの端末（pointer: fine）では従来どおり通常の入力欄を使う。
+  const KB_MAXLEN = 60;
+  function useOnScreenKeyboard(s) {
+    if (s.settings && s.settings.onScreenKeyboard === false) return false;
+    try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
+  }
+
+  // 記入欄＋解答ボタン（通常の入力欄）。画面キーボード時は、入力欄も解答ボタンもキーボード側にある
+  function typeControls(placeholder, osk) {
+    if (osk) return '';
+    return '<input id="type-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="' + placeholder + '" ' +
+      'class="w-full bg-slate-900 border-2 border-slate-700 focus:border-brand rounded-xl px-4 py-4 text-lg text-center focus:outline-none">' +
+      '<button id="type-submit" class="mt-4 w-full bg-brand hover:bg-brand-dark text-white font-bold rounded-xl py-3.5 active:scale-95 transition">解答する</button>' +
+      '<button id="type-dontknow" class="mt-2 w-full text-slate-400 text-sm py-2">わからない</button>';
+  }
+
+  // 入力欄はキーボードの上端に付ける。問題文（特に長い例文）の下に置くと、キーボードの裏に隠れて
+  // 打った文字が見えなくなるため。問題文はその上でスクロールできる。
+  function keyboardHtml(placeholder) {
+    const key = (k, label, cls, aria) =>
+      '<button type="button" class="kb-key' + (cls ? ' ' + cls : '') + '" data-k="' + k + '"' +
+      (aria ? ' aria-label="' + aria + '"' : '') + '>' + label + '</button>';
+    const letters = (str) => str.split('').map(c => key(c, c)).join('');
+    const gap = (w) => '<span class="kb-gap" style="flex:' + w + ' 1 0"></span>';
+    return '<div id="vf-kb" role="group" aria-label="画面キーボード"><div class="kb-inner">' +
+        '<div class="kb-bar">' +
+          '<input id="type-input" class="kb-display" readonly inputmode="none" tabindex="-1" ' +
+            'autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="' + placeholder + '">' +
+          '<button type="button" id="kb-dontknow" class="kb-skip">わからない</button>' +
+        '</div>' +
+        '<div class="kb-body">' +
+          '<div class="kb-row">' + letters('qwertyuiop') + '</div>' +
+          '<div class="kb-row">' + gap(0.5) + letters('asdfghjkl') + gap(0.5) + '</div>' +
+          '<div class="kb-row">' + gap(0.5) + letters('zxcvbnm') +
+            key('Backspace', '<i class="fas fa-delete-left"></i>', 'kb-w15', '1文字削除') + '</div>' +
+          '<div class="kb-row" style="margin-bottom:0">' +
+            key('-', '-') + key("'", "'") + key('/', '/') +
+            key('Space', '&nbsp;', 'kb-w4', 'スペース') +
+            '<button type="button" id="kb-submit" class="kb-key kb-primary kb-w22">解答する</button>' +
+          '</div>' +
+        '</div>' +
+      '</div></div>';
+  }
+
+  // 画面キーボードの高さぶん、本文の下に余白を取る（フィードバックがキーボードに隠れないように）
+  function fitBodyToKeyboard() {
+    const kb = $('#vf-kb'), body = $('#sess-body');
+    if (kb && body) body.style.paddingBottom = (kb.offsetHeight + 24) + 'px';
+  }
+
+  // 解答後: キーの部分を採点ボタンに入れ替える。入力欄（正誤の色付き）は同じ場所に残り、
+  // 高さも据え置くので、キーボードの位置は動かない。
+  function swapKeyboardForGrading(gradingHtml) {
+    const kb = $('#vf-kb');
+    const body = kb && kb.querySelector('.kb-body');
+    if (!body) return;
+    body.style.minHeight = body.offsetHeight + 'px';
+    body.classList.add('kb-grading');
+    body.innerHTML = gradingHtml;
+    const skip = $('#kb-dontknow'); if (skip) skip.style.visibility = 'hidden';
+    // 解答キーのダブルタップが、真下に出た採点ボタンに当たらないよう、少しの間だけ押せなくする
+    kb.classList.add('kb-lock');
+    setTimeout(() => kb.classList.remove('kb-lock'), 400);
+  }
+
+  // 正誤・答え・意味（フィードバックの上部）がキーボードに隠れるときだけ、瞬時にスクロールする。
+  // すでに見えているときは動かさない。
+  function ensureAboveKeyboard(el) {
+    const kb = $('#vf-kb');
+    if (!kb || !el) return;
+    const limit = kb.getBoundingClientRect().top - 12;
+    const r = el.getBoundingClientRect();
+    const need = r.top + Math.min(r.height, 170);
+    if (need > limit) window.scrollBy(0, need - limit);
+  }
+
+  function dropKeyHandler(s) {
+    if (s && s._keyHandler) { document.removeEventListener('keydown', s._keyHandler); s._keyHandler = null; }
+  }
+
+  function bindOnScreenKeyboard(q, card, input) {
+    const s = VF.STATE.session;
+    const kb = $('#vf-kb');
+    fitBodyToKeyboard();
+    if (window.ResizeObserver) new ResizeObserver(fitBodyToKeyboard).observe(kb);
+
+    const press = (k) => {
+      if (k === 'Backspace') { input.value = input.value.slice(0, -1); return; }
+      if (input.value.length >= KB_MAXLEN) return;
+      if (k === 'Space') { if (input.value && !input.value.endsWith(' ')) input.value += ' '; return; }
+      input.value += k;
+    };
+    const submit = () => {
+      const val = input.value;
+      if (!val.trim()) return;
+      revealTyped(q, card, Quiz.gradeTyped(val, q), val);
+    };
+
+    // 文字キー: 指が触れた瞬間に入力（素早い連打を取りこぼさない）。削除キーは長押しで連続削除。
+    let holdT = null, holdI = null;
+    const stopHold = () => { clearTimeout(holdT); clearInterval(holdI); holdT = holdI = null; };
+    const release = () => {
+      stopHold();
+      kb.querySelectorAll('.kb-key.is-down').forEach(b => b.classList.remove('is-down'));
+    };
+    kb.addEventListener('pointerdown', (e) => {
+      const btn = e.target.closest('.kb-key[data-k]');
+      if (!btn) return;
+      e.preventDefault();
+      btn.classList.add('is-down');
+      const k = btn.getAttribute('data-k');
+      press(k);
+      if (k === 'Backspace') {
+        stopHold();
+        holdT = setTimeout(() => { holdI = setInterval(() => press('Backspace'), 55); }, 380);
+      }
+    });
+    ['pointerup', 'pointercancel'].forEach(t => kb.addEventListener(t, release));
+    kb.addEventListener('pointerleave', release);
+
+    // 解答・わからない は、押して離したときに実行（キーを押した瞬間に画面が入れ替わらないように）
+    $('#kb-submit').onclick = submit;
+    $('#kb-dontknow').onclick = () => revealTyped(q, card, false, '');
+
+    // 物理キーボード（iPad+キーボード等）も併用できる
+    s._keyHandler = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key;
+      if (k === 'Enter') { e.preventDefault(); submit(); }
+      else if (k === 'Backspace') { e.preventDefault(); press('Backspace'); }
+      else if (k === ' ') { e.preventDefault(); press('Space'); }
+      else if (/^[a-zA-Z'\/-]$/.test(k)) { e.preventDefault(); press(k.toLowerCase()); }
+    };
+    document.addEventListener('keydown', s._keyHandler);
   }
 
   function bindQuestion(q, card) {
     $('#sess-quit').onclick = quit;
     if (q.format === 'type-je' || q.format === 'cloze') {
       const input = $('#type-input');
+      if ($('#vf-kb')) return bindOnScreenKeyboard(q, card, input);
       input.focus();
       const submit = () => {
         const val = input.value;
@@ -230,13 +370,18 @@
   // ====== 採点・フィードバック（記入） ======
   function revealTyped(q, card, ok, val) {
     const input = $('#type-input');
-    if (input) {
+    if (input && $('#vf-kb')) {
+      // 画面キーボード: 入力欄はキーボード上端に残し、正誤の色だけ付ける
+      input.classList.add(ok ? 'kb-ok' : 'kb-ng');
+    } else if (input) {
       input.disabled = true;
       input.className = 'w-full border-2 rounded-xl px-4 py-4 text-lg text-center ' +
         (ok ? 'bg-emerald-500/15 border-emerald-500' : 'bg-rose-500/15 border-rose-500');
     }
     const sb = $('#type-submit'); if (sb) sb.style.display = 'none';
     const dk = $('#type-dontknow'); if (dk) dk.style.display = 'none';
+    // 画面キーボード使用時は、入力用の物理キー受付をここで止める（採点用のキー受付は showGrading が張る）
+    dropKeyHandler(VF.STATE.session);
     // タイプミス（編集距離1）はHard扱いの選択肢を出す
     const close = !ok && val && Quiz.editDistance(val, q.answer) <= 1 && Quiz.normalize(val).length > 2;
     // 混同検出: 不正解かつタイプミスではない場合、DB内の別の語と一致していないか
@@ -303,8 +448,16 @@
         gradeBtn(4, '簡単', 'bg-sky-500/20 text-sky-200') +
       '</div></div>';
 
-    $('#feedback').innerHTML = answerBlock + grading;
-    $('#feedback').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if ($('#vf-kb')) {
+      // 画面キーボード使用中: 採点ボタンはキーボードの場所に出す。
+      // 正誤・答えは入力欄の下に出し、スクロールは「隠れるときだけ」瞬時に行う。
+      $('#feedback').innerHTML = answerBlock;
+      swapKeyboardForGrading(grading);
+      ensureAboveKeyboard($('#feedback'));
+    } else {
+      $('#feedback').innerHTML = answerBlock + grading;
+      $('#feedback').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     if (window.__bindEtymChips) window.__bindEtymChips($('#feedback'));
 
     // デフォルト推奨をハイライト

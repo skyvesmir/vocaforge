@@ -303,3 +303,75 @@ button { -webkit-user-select: none; user-select: none; }
 body, .bg-slate-900, .bg-slate-800, nav.fixed {
   transition: background-color .25s ease, border-color .25s ease, color .25s ease;
 }
+
+/* ---------- 画面キーボード（記入式・タッチ端末） ----------
+   OSのキーボードを出さず、画面下に固定した自前キーボードで入力する。
+   画面の高さが変わらないので、問題が上下に動かない。
+   解答後は同じ場所を採点ボタンに入れ替える（高さは据え置き）。 */
+html.dark {
+  --kb-bg: rgba(15, 23, 42, 0.94);
+  --kb-key: rgba(148, 163, 184, 0.20);
+  --kb-key-down: rgba(148, 163, 184, 0.40);
+  --kb-key-border: rgba(255, 255, 255, 0.10);
+}
+html.light {
+  --kb-bg: rgba(226, 232, 240, 0.95);
+  --kb-key: rgba(255, 255, 255, 0.92);
+  --kb-key-down: rgba(15, 23, 42, 0.16);
+  --kb-key-border: rgba(15, 23, 42, 0.10);
+}
+#vf-kb {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  padding: 6px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: var(--kb-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border-top: 1px solid var(--glass-border);
+  box-shadow: 0 -8px 24px -12px var(--glass-shadow-ambient);
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+#vf-kb .kb-inner { max-width: 560px; margin: 0 auto; width: 100%; }
+/* 解答後: キー部分を採点ボタンに入れ替える（縦中央・高さ据え置き） */
+#vf-kb .kb-body.kb-grading { display: flex; flex-direction: column; justify-content: center; }
+#vf-kb .kb-body.kb-grading > div { margin-top: 0; }
+/* 解答直後の誤タップ防止（解答キーのダブルタップが、真下に出た採点ボタンに当たらないようにする） */
+#vf-kb.kb-lock { pointer-events: none; }
+/* 入力欄（キーボードの上端）＋「わからない」 */
+#vf-kb .kb-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+#vf-kb .kb-skip { flex: 0 0 auto; font-size: 12px; color: var(--text-mut); padding: 8px 4px; background: none; border: 0; white-space: nowrap; }
+#vf-kb .kb-row { display: flex; gap: 6px; margin-bottom: 6px; }
+#vf-kb .kb-gap { flex: 0 0 auto; }
+#vf-kb .kb-key {
+  flex: 1 1 0; min-width: 0; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 600; line-height: 1;
+  color: var(--text-strong);
+  background: var(--kb-key);
+  border: 1px solid var(--kb-key-border);
+  border-radius: 10px;
+  touch-action: none;
+  transition: background-color .06s ease, transform .06s ease;
+}
+#vf-kb .kb-key.is-down { background: var(--kb-key-down); transform: scale(0.94); }
+#vf-kb .kb-w15 { flex: 1.5 1 0; }
+#vf-kb .kb-w4  { flex: 4 1 0; }
+#vf-kb .kb-w22 { flex: 2.2 1 0; }
+#vf-kb .kb-primary { background: #6366f1; border-color: transparent; color: #fff; font-size: 15px; }
+#vf-kb .kb-primary.is-down { background: #4f46e5; }
+/* 横向きなど縦が狭い画面ではキーを低くする */
+@media (max-height: 480px) {
+  #vf-kb .kb-key { height: 34px; font-size: 16px; }
+  #vf-kb .kb-bar { margin-bottom: 4px; }
+  #vf-kb .kb-row { margin-bottom: 4px; gap: 4px; }
+}
+/* 画面キーボード使用時の入力欄（表示専用。タップしてもOSキーボードは出ない） */
+input.kb-display {
+  flex: 1 1 auto; min-width: 0; height: 44px; padding: 0 12px;
+  font-size: 18px; text-align: center; color: var(--text-strong);
+  background: var(--kb-key); border: 2px solid #6366f1; border-radius: 12px;
+  outline: none; pointer-events: none;
+}
+input.kb-display.kb-ok { background: rgba(16, 185, 129, 0.16); border-color: #10b981; }
+input.kb-display.kb-ng { background: rgba(244, 63, 94, 0.16); border-color: #f43f5e; }
+@media (max-height: 480px) { input.kb-display { height: 36px; } }

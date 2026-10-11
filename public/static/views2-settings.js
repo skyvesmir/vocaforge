@@ -147,6 +147,8 @@
       '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
         toggle('interleave', 'インターリービング', s.interleave, 'カテゴリを混ぜて出題（交互練習で識別力↑）') +
         toggle('strictInput', '記入を厳密採点', s.strictInput, 'OFFなら大小文字・記号の差を許容') +
+        toggle('onScreenKeyboard', '画面キーボードで入力', s.onScreenKeyboard !== false,
+          '記入式でOSのキーボードを出さず、アプリ内のキーボードで入力します（画面が上下に動きません）。スマホ・タブレット用で、PCでは常に通常の入力欄です') +
       '</div>' +
 
       '<h2 class="text-sm font-bold text-slate-300 mb-2">アルゴリズムの個人最適化</h2>' +
