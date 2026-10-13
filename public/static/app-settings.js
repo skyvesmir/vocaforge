@@ -22,6 +22,20 @@
         render(); // ボタンの選択状態を更新
       };
     });
+    // 魔女文字（見た目だけ）: ON/OFF と種類。学習データ・設定の同期には触れない
+    document.querySelectorAll('[data-runes-toggle]').forEach(el => {
+      el.onchange = () => {
+        if (!window.__applyRunes) return;
+        window.__applyRunes(el.checked, window.__runesState().variant);
+        render(); // 種類の選択欄を出し入れする
+      };
+    });
+    document.querySelectorAll('[data-runes-variant]').forEach(el => {
+      el.onchange = () => {
+        if (window.__applyRunes) window.__applyRunes(true, el.value);
+        render();
+      };
+    });
     // 単語DB切替（ターゲット1900 / 全部バージョン / Leap）
     document.querySelectorAll('[data-dataset]').forEach(b => {
       b.onclick = async () => {

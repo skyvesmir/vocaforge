@@ -375,3 +375,43 @@ input.kb-display {
 input.kb-display.kb-ok { background: rgba(16, 185, 129, 0.16); border-color: #10b981; }
 input.kb-display.kb-ng { background: rgba(244, 63, 94, 0.16); border-color: #f43f5e; }
 @media (max-height: 480px) { input.kb-display { height: 36px; } }
+
+/* ---------- 魔女文字（見た目だけの切り替え）----------
+ * 設定の「魔女文字」をONにすると、<html data-runes="種類"> が付く（index.tsx の head スクリプト）。
+ * 効くのは英字（A–Z, a–z）だけ。数字・記号・日本語は元のフォントのまま。文字そのものは変えない。
+ * フォントは fonts/runes/（権利と使用条件は fonts/runes/NOTICE.md）。
+ * 使わないとき（属性なし）は、フォントを読み込まず、見た目も変わらない。
+ * 種類: archaic=古代（大文字）/ modern=現代（小文字）/ musical=音楽 / latin=ラテン。
+ * 音楽文字には J・Q・W・X がないため、その4文字はラテン文字で補う。
+ */
+@font-face {
+  font-family: "VFRuneMain";
+  font-style: normal; font-weight: 400; font-display: block;
+  ascent-override: 90%; descent-override: 21%; line-gap-override: 0%;
+  unicode-range: U+0041-005A, U+0061-007A;
+  src: url("./fonts/runes/MadokaRunes-2.0.woff2") format("woff2");
+}
+@font-face {
+  font-family: "VFRuneMusical";
+  font-style: normal; font-weight: 400; font-display: block;
+  ascent-override: 90%; descent-override: 21%; line-gap-override: 0%;
+  unicode-range: U+0041-005A, U+0061-007A;
+  src: url("./fonts/runes/MadokaMusical.woff2") format("woff2");
+}
+@font-face {
+  font-family: "VFRuneLatin";
+  font-style: normal; font-weight: 400; font-display: block;
+  ascent-override: 90%; descent-override: 21%; line-gap-override: 0%;
+  unicode-range: U+0041-005A, U+0061-007A;
+  src: url("./fonts/runes/MajoPMMM6.woff2") format("woff2");
+}
+html[data-runes="archaic"] { --vf-rune-font: "VFRuneMain";                                  --vf-rune-case: uppercase; }
+html[data-runes="modern"]  { --vf-rune-font: "VFRuneMain";                                  --vf-rune-case: lowercase; }
+html[data-runes="musical"] { --vf-rune-font: "VFRuneMusical", "VFRuneLatin", "VFRuneMain";  --vf-rune-case: none; }
+html[data-runes="latin"]   { --vf-rune-font: "VFRuneLatin";                                 --vf-rune-case: uppercase; }
+html[data-runes] body {
+  font-family: var(--vf-rune-font), Inter, "Noto Sans JP", sans-serif;
+  text-transform: var(--vf-rune-case);
+}
+/* 入力欄・ボタン・選択欄は、ブラウザの既定で font-family と text-transform を継承しない */
+html[data-runes] :is(input, button, select, textarea) { font-family: inherit; text-transform: var(--vf-rune-case); }

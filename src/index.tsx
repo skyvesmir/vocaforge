@@ -39,6 +39,30 @@ app.get('/', (c) => {
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
         if (window.__themeMode() === 'auto') window.__applyTheme('auto');
       });
+      // 魔女文字（見た目だけの切り替え）。テーマと同じく端末ごとに保存し、学習データには入れない
+      var RUNE_VARIANTS = ['archaic', 'modern', 'musical', 'latin'];
+      var runeMem = { on: false, variant: 'archaic' };
+      window.__runesState = function () {
+        var st = { on: runeMem.on, variant: runeMem.variant };
+        try {
+          var on = localStorage.getItem('vf-runes');
+          var v = localStorage.getItem('vf-runes-variant');
+          if (on !== null) st.on = on === '1';
+          if (RUNE_VARIANTS.indexOf(v) >= 0) st.variant = v;
+        } catch (e) {}
+        return st;
+      };
+      window.__applyRunes = function (on, variant) {
+        if (RUNE_VARIANTS.indexOf(variant) < 0) variant = 'archaic';
+        runeMem = { on: !!on, variant: variant };
+        try { localStorage.setItem('vf-runes', on ? '1' : '0'); localStorage.setItem('vf-runes-variant', variant); } catch (e) {}
+        if (on) document.documentElement.setAttribute('data-runes', variant);
+        else document.documentElement.removeAttribute('data-runes');
+      };
+      (function () {
+        var st = window.__runesState();
+        if (st.on) { runeMem = st; document.documentElement.setAttribute('data-runes', st.variant); }
+      })();
     })();
   </script>
   <title>VocaForge — 英語語彙 超強化トレーナー</title>

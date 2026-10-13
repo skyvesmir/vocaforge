@@ -33,9 +33,11 @@
 
 `public/static/data/` のその他の単語・熟語データ、および `vocab_work/` のファイルは、作者の個人学習用に含まれているもので、**再利用・再配布は許諾していません**（ライセンスの対象外です）。
 
+`public/static/fonts/runes/` の魔女文字フォントは、ファンが作ったフォント（Puella Magi Wiki で共有されているもの）で、MIT の対象外です。権利と使用条件は同じ場所の `NOTICE.md` を参照してください。非営利の範囲での利用が前提で、有償・広告つきの製品で使う場合は、権利者に確認が必要です。
+
 権利者の方で掲載の見直しをご希望の場合は、このリポジトリの Issue でお知らせください。速やかに対応します。
 
-*English: The MIT license covers the source code and the etymology dataset (`public/static/data/etymology.json`) only. The vocabulary and phrase datasets and the files under `vocab_work/` are included for the author's personal study and are not licensed for reuse or redistribution.*
+*English: The MIT license covers the source code and the etymology dataset (`public/static/data/etymology.json`) only. The vocabulary and phrase datasets and the files under `vocab_work/` are included for the author's personal study and are not licensed for reuse or redistribution. The fan-made Witch Rune fonts under `public/static/fonts/runes/` are not covered by the MIT license either; see `NOTICE.md` there.*
 
 ## 使い方
 
@@ -82,6 +84,7 @@
 - **Retrievability降順の復習並び**：Anki公式シミュレーションで「同じ保持率を最少の学習時間で維持できる最良の並び」と結論づけられた方式を採用。
 - **復習キューの自動生成**：復習期限カードを優先し、1日の新規カード上限を尊重。
 - **インターリービング**：カテゴリを混ぜて出題（交互練習）。設定でON/OFF。
+- **魔女文字表示（見た目だけ）**：設定の「外観」で、英字を『魔法少女まどか☆マギカ』の魔女文字で表示（古代／現代／音楽／ラテンから選択）。出題・採点・入力・学習データは変わらず、数字・記号・日本語はそのまま。端末ごとの設定で、クラウドには同期しない。フォントは非営利の範囲で使えるファンメイドのもの（`public/static/fonts/runes/NOTICE.md`）。
 - **画面キーボード**：スマホ・タブレットの記入式（日本語→英語／例文穴埋め）では、OSのキーボードを出さず、アプリ内のキーボード（画面下に固定）で入力。出し入れによる画面の上下の動きがなく、解答後は同じ場所が採点ボタンに入れ替わる。物理キーボードも併用可。PC（マウス操作の端末）では通常の入力欄。設定の「画面キーボードで入力」でON/OFF（既定ON）。
 - **記入の柔軟採点**：大小文字・記号・空白の差を許容（厳密採点も選択可）。熟語の `of/about` 等のスラッシュ表記両対応、スペル違いの検出。
 - **リーチ（苦手カード）検出**：FSRSの記憶状態で判定（復習5回以上 かつ 安定度1日未満）。一時的なミスではなく「何回復習しても定着しない」カードだけを統計で警告し、弱点集中モードの対象にする。閾値は `fsrs.js` の `LEECH`。

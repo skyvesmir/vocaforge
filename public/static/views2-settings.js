@@ -77,11 +77,34 @@
         themeBtn('dark', 'fa-moon', 'ダーク') +
       '</div>';
 
+    // ---- 魔女文字（見た目だけ。端末ごとに保存。index.tsx の __applyRunes）----
+    const runes = (window.__runesState && window.__runesState()) || { on: false, variant: 'archaic' };
+    const RUNE_OPTIONS = [
+      ['archaic', '古代文字（大文字で表示）'],
+      ['modern', '現代文字（小文字で表示）'],
+      ['musical', '音楽文字（J・Q・W・Xはラテン文字）'],
+      ['latin', 'ラテン文字']
+    ];
+    const runesHtml =
+      '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4">' +
+        '<label class="flex items-center justify-between py-3 cursor-pointer">' +
+          '<span><span class="text-sm font-medium">魔女文字</span>' +
+          '<span class="block text-xs text-slate-400 mt-0.5">英字を魔女文字で表示します。見た目だけが変わり、出題・採点・入力は変わりません。数字・記号・日本語はそのままです</span></span>' +
+          '<input type="checkbox" data-runes-toggle ' + (runes.on ? 'checked' : '') + ' class="w-11 h-6 appearance-none rounded-full bg-slate-700 checked:bg-brand relative transition cursor-pointer toggle"></label>' +
+        (runes.on
+          ? '<div class="pb-3"><label class="block text-xs text-slate-400 mb-1.5" for="runes-variant">魔女文字の種類</label>' +
+            '<select id="runes-variant" data-runes-variant class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-200">' +
+            RUNE_OPTIONS.map(o => '<option value="' + o[0] + '"' + (runes.variant === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') +
+            '</select></div>'
+          : '') +
+      '</div>';
+
     return '<div class="max-w-xl mx-auto pb-24 px-4 pt-6">' +
       '<h1 class="text-xl font-extrabold mb-4">設定</h1>' +
 
       '<h2 class="text-sm font-bold text-slate-300 mb-2">外観</h2>' +
       themeHtml +
+      runesHtml +
 
       '<h2 class="text-sm font-bold text-slate-300 mb-2">単語データベース</h2>' +
       (function () {
