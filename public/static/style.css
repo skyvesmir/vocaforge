@@ -272,7 +272,8 @@ button.bg-gradient-to-br:active, button.bg-gradient-to-r:active {
 }
 
 /* ---------- トグルスイッチ ---------- */
-input.toggle { position: relative; outline: none; }
+/* 説明文が長い行でもスイッチが縮まないように固定し、文との間に余白を取る */
+input.toggle { position: relative; outline: none; flex: none; margin-left: 12px; }
 input.toggle::before {
   content: ""; position: absolute; top: 2px; left: 2px;
   width: 20px; height: 20px; border-radius: 9999px; background: #fff;
@@ -310,12 +311,14 @@ body, .bg-slate-900, .bg-slate-800, nav.fixed {
    解答後は同じ場所を採点ボタンに入れ替える（高さは据え置き）。 */
 html.dark {
   --kb-bg: rgba(15, 23, 42, 0.94);
+  --kb-solid: #0f172a;
   --kb-key: rgba(148, 163, 184, 0.20);
   --kb-key-down: rgba(148, 163, 184, 0.40);
   --kb-key-border: rgba(255, 255, 255, 0.10);
 }
 html.light {
   --kb-bg: rgba(226, 232, 240, 0.95);
+  --kb-solid: #e2e8f0;
   --kb-key: rgba(255, 255, 255, 0.92);
   --kb-key-down: rgba(15, 23, 42, 0.16);
   --kb-key-border: rgba(15, 23, 42, 0.10);
@@ -340,31 +343,57 @@ html.light {
 /* 入力欄（キーボードの上端）＋「わからない」 */
 #vf-kb .kb-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 #vf-kb .kb-skip { flex: 0 0 auto; font-size: 12px; color: var(--text-mut); padding: 8px 4px; background: none; border: 0; white-space: nowrap; }
-#vf-kb .kb-row { display: flex; gap: 6px; margin-bottom: 6px; }
+/* キー寸法は session.js の設定（端末ごと）から来る。--kb-h-pref=高さ, --kb-gap=見た目の間隔。
+   ・kb-hit あり: キーの間もタップに含める（ボタン自体は間隔ぶん広く、見た目の面だけ小さい）
+   ・kb-hit なし: 間隔は押せない隙間 */
+#vf-kb { --kb-h: var(--kb-h-pref, 48px); --kb-gap: 5px; }
+#vf-kb .kb-row { display: flex; gap: var(--kb-gap); margin-bottom: var(--kb-gap); }
+#vf-kb .kb-row-last { margin-bottom: 0; }
 #vf-kb .kb-gap { flex: 0 0 auto; }
+#vf-kb .kb-gap-l { margin-right: calc(var(--kb-gap) * -0.5); }
+#vf-kb .kb-gap-r { margin-left: calc(var(--kb-gap) * -0.5); }
+#vf-kb.kb-hit .kb-row { gap: 0; margin-bottom: 0; }
+#vf-kb.kb-hit .kb-gap-l, #vf-kb.kb-hit .kb-gap-r { margin: 0; }
+#vf-kb.kb-hit .kb-gap { padding: 0 calc(var(--kb-gap) / 2); }
 #vf-kb .kb-key {
-  flex: 1 1 0; min-width: 0; height: 42px;
+  flex: 1 1 0; min-width: 0; padding: 0; margin: 0;
+  background: none; border: 0;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#vf-kb.kb-hit .kb-key { padding: calc(var(--kb-gap) / 2); }
+#vf-kb .kb-face {
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: 600; line-height: 1;
+  width: 100%; height: var(--kb-h);
+  font-size: clamp(16px, calc(var(--kb-h) * 0.42), 24px); font-weight: 600; line-height: 1;
   color: var(--text-strong);
   background: var(--kb-key);
   border: 1px solid var(--kb-key-border);
   border-radius: 10px;
-  touch-action: none;
   transition: background-color .06s ease, transform .06s ease;
 }
-#vf-kb .kb-key.is-down { background: var(--kb-key-down); transform: scale(0.94); }
-#vf-kb .kb-w15 { flex: 1.5 1 0; }
-#vf-kb .kb-w4  { flex: 4 1 0; }
-#vf-kb .kb-w22 { flex: 2.2 1 0; }
-#vf-kb .kb-primary { background: #6366f1; border-color: transparent; color: #fff; font-size: 15px; }
-#vf-kb .kb-primary.is-down { background: #4f46e5; }
+#vf-kb .kb-key.is-down .kb-face { background: var(--kb-key-down); transform: scale(0.94); }
+#vf-kb .kb-primary .kb-face { background: #6366f1; border-color: transparent; color: #fff; font-size: 15px; }
+#vf-kb .kb-primary.is-down .kb-face { background: #4f46e5; }
 /* 横向きなど縦が狭い画面ではキーを低くする */
 @media (max-height: 480px) {
-  #vf-kb .kb-key { height: 34px; font-size: 16px; }
+  #vf-kb { --kb-h: min(var(--kb-h-pref, 48px), 34px); }
   #vf-kb .kb-bar { margin-bottom: 4px; }
-  #vf-kb .kb-row { margin-bottom: 4px; gap: 4px; }
 }
+/* 設定画面の試し打ち: 画面下に固定せず、その場に置く */
+#vf-kb[data-preview] {
+  position: static; z-index: auto; border: 1px solid var(--kb-key-border); border-radius: 16px;
+  box-shadow: none; padding: 6px 6px 8px;
+}
+#vf-kb[data-preview] .kb-skip { display: none; }
+/* 試し打ちは、スライダーを動かしている間も見えるよう、上に貼り付ける（下の項目が透けないよう不透明に近い背景） */
+.kb-sticky {
+  position: sticky; top: 8px; z-index: 10; margin: 0 -8px; padding-left: 8px; padding-right: 8px;
+  background: var(--kb-solid); border-radius: 16px;
+  box-shadow: 0 8px 20px -10px var(--glass-shadow-ambient);
+}
+.kb-sticky #vf-kb[data-preview] { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+
 /* 画面キーボード使用時の入力欄（表示専用。タップしてもOSキーボードは出ない） */
 input.kb-display {
   flex: 1 1 auto; min-width: 0; height: 44px; padding: 0 12px;

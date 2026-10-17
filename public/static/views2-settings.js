@@ -99,6 +99,38 @@
           : '') +
       '</div>';
 
+    // ---- 画面キーボードの寸法（端末ごとに保存。クラウドには同期しない）----
+    let kbHtml = '';
+    if (s.onScreenKeyboard !== false && window.__kbPrefs) {
+      const kp = window.__kbPrefs();
+      const kbRange = (key, label, min, max, step, unit) =>
+        '<div class="py-3"><div class="text-sm font-medium mb-2">' + label + ' <span class="text-brand font-bold" id="kb-val-' + key + '">' + kp[key] + unit + '</span></div>' +
+        '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + kp[key] + '" data-kb="' + key + '" class="w-full accent-indigo-500"></div>';
+      const kbToggle = (key, label, desc) =>
+        '<label class="flex items-center justify-between py-3 cursor-pointer"><span><span class="text-sm font-medium">' + label + '</span>' +
+        '<span class="block text-xs text-slate-400 mt-0.5">' + desc + '</span></span>' +
+        '<input type="checkbox" data-kb-toggle="' + key + '" ' + (kp[key] ? 'checked' : '') + ' class="w-11 h-6 appearance-none rounded-full bg-slate-700 checked:bg-brand relative transition cursor-pointer toggle"></label>';
+      const alignBtn = (v, label) =>
+        '<button data-kb-align="' + v + '" class="flex-1 py-2 rounded-xl border text-xs transition ' +
+        (kp.align === v ? 'bg-brand/15 border-brand/50 text-brand font-bold' : 'bg-slate-800 border-transparent text-slate-300') + '">' + label + '</button>';
+      kbHtml =
+        '<h2 class="text-sm font-bold text-slate-300 mb-2">画面キーボードの寸法</h2>' +
+        '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
+          '<div class="py-3"><p class="text-[11px] text-slate-500 leading-relaxed">押しやすい大きさは、端末や手の大きさ、持ち方で変わります。下の試し打ちで、親指で押してみながら合わせてください。この設定はこの端末だけに保存され、他の端末には同期されません。</p></div>' +
+          '<div class="kb-sticky py-3"><div class="text-xs text-slate-400 mb-2">試し打ち（スライダーを動かすと、ここがすぐ変わります）</div>' +
+            '<div id="kb-preview" class="kb-preview">' + (window.__kbPreviewHtml ? window.__kbPreviewHtml() : '') + '</div></div>' +
+          kbRange('h', 'キーの高さ', 36, 64, 2, 'px') +
+          kbRange('gap', 'キーの間隔', 2, 10, 1, 'px') +
+          kbToggle('edge', '左右の端のキーを大きくする', '親指が届きにくい端のキー（Q・A・P・L など）を、約2割大きくします') +
+          kbToggle('hit', 'キーの間もタップできるようにする', '見た目の間隔は変えず、キーの間を押しても近いほうのキーとして入力します') +
+          kbRange('lift', '下端からの高さ', 0, 120, 4, 'px') +
+          kbRange('width', 'キーボードの幅', 70, 100, 5, '%') +
+          '<div class="py-3"><div class="text-sm font-medium mb-2">幅を狭くしたときの寄せ方</div>' +
+            '<div class="flex gap-2">' + alignBtn('left', '左') + alignBtn('center', '中央') + alignBtn('right', '右') + '</div></div>' +
+          '<div class="py-3"><button data-kb-reset class="w-full text-xs text-slate-400 py-2 rounded-xl bg-slate-800">初期値に戻す</button></div>' +
+        '</div>';
+    }
+
     return '<div class="max-w-xl mx-auto pb-24 px-4 pt-6">' +
       '<h1 class="text-xl font-extrabold mb-4">設定</h1>' +
 
@@ -173,6 +205,7 @@
         toggle('onScreenKeyboard', '画面キーボードで入力', s.onScreenKeyboard !== false,
           '記入式でOSのキーボードを出さず、アプリ内のキーボードで入力します（画面が上下に動きません）。スマホ・タブレット用で、PCでは常に通常の入力欄です') +
       '</div>' +
+      kbHtml +
 
       '<h2 class="text-sm font-bold text-slate-300 mb-2">アルゴリズムの個人最適化</h2>' +
       (function () {
