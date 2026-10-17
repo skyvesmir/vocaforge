@@ -188,27 +188,81 @@
 
   // 入力欄はキーボードの上端に付ける。問題文（特に長い例文）の下に置くと、キーボードの裏に隠れて
   // 打った文字が見えなくなるため。問題文はその上でスクロールできる。
+  // ---- 画面キーボードの寸法（端末ごと。クラウドには同期しない）----
+  // 「親指で押しやすい寸法」は端末・手の大きさ・持ち方で変わり、これが最適という値は確立していない。
+  // そこで、研究メモ（スマートフォン縦画面向け QWERTY キーボード設計メモ）の方針に沿って、
+  // 寸法を1つずつ変えて比べられるようにしてある。初期値は暫定。
+  //   h     キーの高さ（CSS px）。端末によって実寸（mm）は変わる
+  //   gap   キーの見た目の間隔（CSS px）
+  //   edge  左右の端のキー（q a p l など）を大きくする
+  //   hit   キーの間も、近いほうのキーとして押せるようにする（見た目の間隔は変えない）
+  //   lift  キーボードを下端から浮かせる高さ（CSS px）
+  //   width キーボードの横幅（画面幅に対する%）。100未満のときは align で寄せる
+  //   align 'left' | 'center' | 'right'
+  const KB_PREF_KEY = 'vf-kb-prefs';
+  const KB_DEFAULT = { h: 48, gap: 5, edge: true, hit: true, lift: 0, width: 100, align: 'center' };
+  const KB_RANGE = { h: [36, 64], gap: [2, 10], lift: [0, 120], width: [70, 100] };
+  function kbPrefs() {
+    let raw = {};
+    try { raw = JSON.parse(localStorage.getItem(KB_PREF_KEY)) || {}; } catch (e) { raw = {}; }
+    const p = Object.assign({}, KB_DEFAULT);
+    Object.keys(KB_RANGE).forEach(k => {
+      const n = Number(raw[k]);
+      if (raw[k] != null && isFinite(n)) p[k] = Math.min(KB_RANGE[k][1], Math.max(KB_RANGE[k][0], Math.round(n)));
+    });
+    if (typeof raw.edge === 'boolean') p.edge = raw.edge;
+    if (typeof raw.hit === 'boolean') p.hit = raw.hit;
+    if (raw.align === 'left' || raw.align === 'right' || raw.align === 'center') p.align = raw.align;
+    return p;
+  }
+  function setKbPrefs(patch) {
+    const p = Object.assign(kbPrefs(), patch || {});
+    try { localStorage.setItem(KB_PREF_KEY, JSON.stringify(p)); } catch (e) { /* 保存できなくても動く */ }
+    return kbPrefs();
+  }
+  window.__kbPrefs = kbPrefs;
+  window.__setKbPrefs = setKbPrefs;
+  window.__kbDefaults = function () { return Object.assign({}, KB_DEFAULT); };
+  // 設定画面の試し打ち用。位置は固定せず、その場に置く（ID は学習画面と重ならないよう外す）
+  window.__kbPreviewHtml = function () {
+    return keyboardHtml('試し打ち')
+      .replace('id="vf-kb"', 'id="vf-kb" data-preview="1"')
+      .replace(' id="type-input"', '').replace(' id="kb-dontknow"', '').replace(' id="kb-submit"', '');
+  };
+
   function keyboardHtml(placeholder) {
-    const key = (k, label, cls, aria) =>
-      '<button type="button" class="kb-key' + (cls ? ' ' + cls : '') + '" data-k="' + k + '"' +
-      (aria ? ' aria-label="' + aria + '"' : '') + '>' + label + '</button>';
-    const letters = (str) => str.split('').map(c => key(c, c)).join('');
-    const gap = (w) => '<span class="kb-gap" style="flex:' + w + ' 1 0"></span>';
-    return '<div id="vf-kb" role="group" aria-label="画面キーボード"><div class="kb-inner">' +
+    const P = kbPrefs();
+    // 各行の幅は「重み」で決める。端のキーを e 倍にしても、3段が同じ横幅（T）に収まるよう計算する。
+    const e = P.edge ? 1.2 : 1;
+    const T = 8 + 2 * e;                      // 1段目: 端2キー(e)＋中8キー(1)
+    const lw = (T - 2.3) / 7;                 // 3段目の文字キー: 余白0.5＋文字7＋削除1.8 = T
+    const w4 = 3.6 + e;                       // 4段目: e＋1＋1＋スペース＋解答2.4 = T
+    const key = (k, label, w, aria) =>
+      '<button type="button" class="kb-key" data-k="' + k + '" style="flex:' + w + ' 1 0"' +
+      (aria ? ' aria-label="' + aria + '"' : '') + '><span class="kb-face">' + label + '</span></button>';
+    const cells = (str, wFirst, wLast, wMid) => str.split('').map((c, i) =>
+      key(c, c, i === 0 ? wFirst : i === str.length - 1 ? wLast : wMid)).join('');
+    const gapL = (w) => '<span class="kb-gap kb-gap-l" style="flex:' + w + ' 1 0"></span>';
+    const gapR = (w) => '<span class="kb-gap kb-gap-r" style="flex:' + w + ' 1 0"></span>';
+    const style = '--kb-h-pref:' + P.h + 'px;--kb-gap:' + P.gap + 'px;bottom:' + P.lift + 'px;';
+    const inner = 'width:' + P.width + '%;margin:' +
+      (P.align === 'left' ? '0 auto 0 0' : P.align === 'right' ? '0 0 0 auto' : '0 auto');
+    return '<div id="vf-kb" class="' + (P.hit ? 'kb-hit' : '') + '" role="group" aria-label="画面キーボード" style="' + style + '">' +
+      '<div class="kb-inner" style="' + inner + '">' +
         '<div class="kb-bar">' +
           '<input id="type-input" class="kb-display" readonly inputmode="none" tabindex="-1" ' +
             'autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="' + placeholder + '">' +
           '<button type="button" id="kb-dontknow" class="kb-skip">わからない</button>' +
         '</div>' +
         '<div class="kb-body">' +
-          '<div class="kb-row">' + letters('qwertyuiop') + '</div>' +
-          '<div class="kb-row">' + gap(0.5) + letters('asdfghjkl') + gap(0.5) + '</div>' +
-          '<div class="kb-row">' + gap(0.5) + letters('zxcvbnm') +
-            key('Backspace', '<i class="fas fa-delete-left"></i>', 'kb-w15', '1文字削除') + '</div>' +
-          '<div class="kb-row" style="margin-bottom:0">' +
-            key('-', '-') + key("'", "'") + key('/', '/') +
-            key('Space', '&nbsp;', 'kb-w4', 'スペース') +
-            '<button type="button" id="kb-submit" class="kb-key kb-primary kb-w22">解答する</button>' +
+          '<div class="kb-row">' + cells('qwertyuiop', e, e, 1) + '</div>' +
+          '<div class="kb-row">' + gapL(0.5) + cells('asdfghjkl', e, e, 1) + gapR(0.5) + '</div>' +
+          '<div class="kb-row">' + gapL(0.5) + cells('zxcvbnm', lw, lw, lw) +
+            key('Backspace', '<i class="fas fa-delete-left"></i>', 1.8, '1文字削除') + '</div>' +
+          '<div class="kb-row kb-row-last">' +
+            key('-', '-', e) + key("'", "'", 1) + key('/', '/', 1) +
+            key('Space', '&nbsp;', w4, 'スペース') +
+            '<button type="button" id="kb-submit" class="kb-key kb-primary" style="flex:2.4 1 0"><span class="kb-face">解答する</span></button>' +
           '</div>' +
         '</div>' +
       '</div></div>';
@@ -217,7 +271,7 @@
   // 画面キーボードの高さぶん、本文の下に余白を取る（フィードバックがキーボードに隠れないように）
   function fitBodyToKeyboard() {
     const kb = $('#vf-kb'), body = $('#sess-body');
-    if (kb && body) body.style.paddingBottom = (kb.offsetHeight + 24) + 'px';
+    if (kb && body) body.style.paddingBottom = (kb.offsetHeight + (parseInt(kb.style.bottom, 10) || 0) + 24) + 'px';
   }
 
   // 解答後: キーの部分を採点ボタンに入れ替える。入力欄（正誤の色付き）は同じ場所に残り、

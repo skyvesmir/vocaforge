@@ -36,6 +36,43 @@
         render();
       };
     });
+    // 画面キーボードの寸法（端末ごと。同期しない）。変えたら試し打ちだけ作り直す
+    const kbRefresh = () => {
+      const pv = document.getElementById('kb-preview');
+      if (!pv || !window.__kbPreviewHtml) return;
+      const typed = pv.querySelector('.kb-display');
+      const keep = typed ? typed.value : '';
+      pv.innerHTML = window.__kbPreviewHtml();
+      const t = pv.querySelector('.kb-display'); if (t) t.value = keep;
+    };
+    document.querySelectorAll('[data-kb]').forEach(el => {
+      el.oninput = () => {
+        const k = el.getAttribute('data-kb');
+        const p = window.__setKbPrefs({ [k]: parseInt(el.value, 10) });
+        const lab = document.getElementById('kb-val-' + k);
+        if (lab) lab.textContent = p[k] + (k === 'width' ? '%' : 'px');
+        kbRefresh();
+      };
+    });
+    document.querySelectorAll('[data-kb-toggle]').forEach(el => {
+      el.onchange = () => { window.__setKbPrefs({ [el.getAttribute('data-kb-toggle')]: el.checked }); kbRefresh(); };
+    });
+    document.querySelectorAll('[data-kb-align]').forEach(b => {
+      b.onclick = () => { window.__setKbPrefs({ align: b.getAttribute('data-kb-align') }); render(); };
+    });
+    document.querySelectorAll('[data-kb-reset]').forEach(b => {
+      b.onclick = () => { window.__setKbPrefs(window.__kbDefaults()); render(); };
+    });
+    const kbPv = document.getElementById('kb-preview');
+    if (kbPv) kbPv.addEventListener('pointerdown', e => {
+      const b = e.target.closest('.kb-key[data-k]');
+      const inp = kbPv.querySelector('.kb-display');
+      if (!b || !inp) return;
+      e.preventDefault();
+      const k = b.getAttribute('data-k');
+      if (k === 'Backspace') inp.value = inp.value.slice(0, -1);
+      else if (inp.value.length < 40) inp.value += (k === 'Space' ? ' ' : k);
+    });
     // 単語DB切替（ターゲット1900 / 全部バージョン / Leap）
     document.querySelectorAll('[data-dataset]').forEach(b => {
       b.onclick = async () => {
