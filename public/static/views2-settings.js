@@ -220,7 +220,7 @@
             '<p class="text-xs text-slate-400 mb-3">' + dateStr + ' に ' + st.optimizedReviews + ' 件の履歴で最適化済み。' +
             (st.suggestReoptimize ? ' <span class="text-amber-300 font-bold">履歴が2倍になりました。再最適化を推奨します。</span>' : '') + '</p>';
         } else if (st.ready) {
-          body = '<p class="text-xs text-slate-400 mb-3">復習履歴 ' + st.reviews + ' 件。あなたの記憶パターンに合わせてFSRS-7のパラメータを調整できます（ベンチマークでは約84%の学習者で予測精度が向上）。処理はこの端末内で完結します。</p>';
+          body = '<p class="text-xs text-slate-400 mb-3">復習履歴 ' + st.reviews + ' 件。あなたの記憶パターンに合わせてFSRS-7のパラメータを調整できます。学習に使っていない新しい履歴で「はっきり良い」と確かめられたときだけ、適用します（良くならない人もいます）。処理はこの端末内で完結します。</p>';
         } else {
           body = '<p class="text-xs text-slate-400 mb-3">復習履歴 ' + st.reviews + ' / ' + (window.FSRSOpt ? FSRSOpt.MIN_REVIEWS : 300) + ' 件。履歴がたまるとあなた専用のパラメータに最適化できます。まずは学習を続けましょう！</p>';
         }

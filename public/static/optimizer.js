@@ -1,16 +1,20 @@
 /* FSRS-7 オンデバイス・パラメータ最適化
  *
  * 根拠（2026年7月 Web調査）:
- *  - srs-benchmark（Anki 1万人・7.3億レビュー）: 個人最適化したFSRSは
- *    デフォルトパラメータに対し84.3%のユーザーで優位（superiority表）。
- *    アルゴリズム自体の乗り換え（LSTM/RWKV等）より、まず「個人の履歴への
- *    フィッティング」が最大の改善要因。
+ *  - srs-benchmark（Anki 1万人・7.3億レビュー）の README では、個人最適化した
+ *    FSRS-7 は既定パラメータより log loss が小さい（同日復習なし: 0.3401 vs 0.3620）。
+ *    なお「84.3%のユーザーで優位」は Expertium の記事の FSRS-6 同士の比較の数字で、
+ *    FSRS-7 のものではない。このアプリの実装（35重みの草案版）での効果は未検証。
  *  - Anki公式FAQ: 「レビュー数が倍になるごとに再最適化」を推奨。
  *  - 本実装は fsrs-optimizer（Python/PyTorch）の座標降下版。
  *    勾配計算の代わりに座標ごとの候補探索（coordinate descent）を使い、
  *    ブラウザ内で数秒で完了する。
- *  - 過学習ガード: 時系列ホールドアウト（古い75%で学習→新しい25%で検証）。
- *    srs-benchmarkのTimeSeriesSplitと同じ思想。検証で改善しなければ適用しない。
+ *  - 過学習ガード: 時系列ホールドアウト（古い75%で学習→新しい25%で検証）を必須にする。
+ *    検証用の履歴が足りないときは、最適化しない（学習した履歴で採点しない）。
+ *    採用は「1件ごとの損失の差（対の差）が、標準誤差の2倍より大きく良い」かつ
+ *    「相対1%以上良い」ときだけ。比較相手は、既定パラメータと、いま使っているパラメータの両方。
+ *    （旧: 相対1%だけ。検証セット50〜75件では閾値が雑音の1/10〜1/25で、
+ *     改善の余地がない人にも約2割で採用していた。testN<50 では学習した履歴で採点していた）
  *
  * 公開API: window.FSRSOpt = { status, optimize, applySaved, MIN_REVIEWS }
  */
@@ -18,6 +22,9 @@
   'use strict';
 
   const MIN_REVIEWS = 300;   // これ未満では最適化しない（Anki公式は400前後を推奨）
+  const MIN_TEST = 50;       // 検証に使う新しいレビュー（経過0.5日以上）の最低件数。これ未満では最適化しない
+  const GATE_Z = 2;          // 採用: 対の差の平均が、標準誤差の何倍より大きく良いか
+  const GATE_REL = 0.01;     // 採用: 平均 log loss が相対でこれ以上良いこと
   const DAY = 86400000;
 
   // 最適化対象のパラメータ（長期記憶に効く16個）。
@@ -71,9 +78,10 @@
 
   // ---- 損失計算: 候補パラメータで履歴をリプレイし log loss を測る ----
   // phase: 'train' | 'test' | 'all' … どのレビューを損失に算入するか
-  function computeLoss(W, seqs, phase) {
+  // 1件ごとの損失の配列を返す（重みが違っても、並びと件数は同じ。対の差を取るため）。
+  function lossList(W, seqs, phase) {
     const eng = FSRS.makeEngine(W);
-    let loss = 0, n = 0;
+    const out = [];
     for (let k = 0; k < seqs.length; k++) {
       const seq = seqs[k];
       let S = 0, D = 0;
@@ -92,8 +100,7 @@
           if (inPhase) {
             const y = rv.grade > 1 ? 1 : 0;
             const p = Math.min(Math.max(R, 1e-6), 1 - 1e-6);
-            loss += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
-            n++;
+            out.push(-(y * Math.log(p) + (1 - y) * Math.log(1 - p)));
           }
         }
         D = eng.nextDifficulty(D, rv.grade);
@@ -101,8 +108,35 @@
         S = Math.max(eng.stabilityUpdate(base, D, S, R, rv.grade), 0.001);
       }
     }
-    return n ? loss / n : Infinity;
+    return out;
   }
+
+  function meanOf(a) {
+    if (!a.length) return Infinity;
+    let t = 0;
+    for (let i = 0; i < a.length; i++) t += a[i];
+    return t / a.length;
+  }
+
+  function computeLoss(W, seqs, phase) {
+    return meanOf(lossList(W, seqs, phase));
+  }
+
+  // 対の差: base（比べる相手）の損失 − cand（候補）の損失。正なら候補が良い。
+  // 戻り値: { n, gain（平均の差）, se（その標準誤差）, rel（相対改善）}
+  function pairedGain(base, cand) {
+    const n = Math.min(base.length, cand.length);
+    if (n < 2) return { n, gain: 0, se: Infinity, rel: 0 };
+    let m = 0;
+    for (let i = 0; i < n; i++) m += base[i] - cand[i];
+    m /= n;
+    let v = 0;
+    for (let i = 0; i < n; i++) { const x = base[i] - cand[i] - m; v += x * x; }
+    const se = Math.sqrt(v / (n - 1) / n);
+    const bm = meanOf(base.slice(0, n));
+    return { n, gain: m, se, rel: bm > 0 ? m / bm : 0 };
+  }
+  const passesGate = g => g.n >= MIN_TEST && g.gain > GATE_Z * g.se && g.rel >= GATE_REL;
 
   const clampP = (i, v) => {
     const b = BOUNDS[i];
@@ -179,24 +213,33 @@
       if (!seqs.length || !evaluable) {
         return { ok: false, reason: 'not_enough', reviews: total, needed: MIN_REVIEWS, truncated };
       }
+      // 検証用の新しい履歴が足りないときは、最適化しない。
+      // （以前は、学習に使った履歴で採点していた。それでは「良くなった」と必ず見えてしまう）
+      if (testN < MIN_TEST) {
+        return { ok: false, reason: 'holdout_short', reviews: total, needed: MIN_REVIEWS,
+          testN, needTest: MIN_TEST, truncated };
+      }
       const defaultW = FSRS.defaultWeights.slice();
+      const currentW = FSRS.getWeights();
+      const hasCustom = currentW.some((v, i) => v !== defaultW[i]);
 
-      // 十分なテストデータがあれば時系列ホールドアウトで検証
-      const useHoldout = testN >= 50;
-      const trainPhase = useHoldout ? 'train' : 'all';
+      const baseDefault = lossList(defaultW, seqs, 'test');
+      const baseCurrent = hasCustom ? lossList(currentW, seqs, 'test') : null;
+      const { W } = await coordinateDescent(seqs, 'train', onProgress);
+      const cand = lossList(W, seqs, 'test');
 
-      const before = computeLoss(defaultW, seqs, useHoldout ? 'test' : 'all');
-      const { W } = await coordinateDescent(seqs, trainPhase, onProgress);
-      const after = computeLoss(W, seqs, useHoldout ? 'test' : 'all');
+      // 採用: 既定とも、いま使っているものとも、対の差で「はっきり」良いときだけ
+      const vsDefault = pairedGain(baseDefault, cand);
+      const vsCurrent = hasCustom ? pairedGain(baseCurrent, cand) : null;
+      const ok = passesGate(vsDefault) && (!vsCurrent || passesGate(vsCurrent));
+      const before = meanOf(hasCustom ? baseCurrent : baseDefault);
+      const after = meanOf(cand);
 
-      // 検証: 改善しなければ適用しない（過学習ガード）
-      // holdout時も相対1%のマージンを要求（検証セット~50-75件では log loss の
-      // 標準誤差が ~0.05-0.1 あり、閾値0だと偶然の微小改善でも適用されるため）
-      const threshold = useHoldout ? 0.01 : 0.02; // 全データ学習時は2%以上の改善を要求
-      if (!(after < before * (1 - threshold))) {
+      if (!ok) {
         return {
           ok: true, applied: false, before, after,
-          reviews: total, evaluable, holdout: useHoldout, truncated,
+          reviews: total, evaluable, holdout: true, truncated,
+          gain: vsDefault.gain, se: vsDefault.se,
           reason: 'no_improvement'
         };
       }
@@ -208,7 +251,8 @@
         // 累計回数で記録（ログキャップ後も「レビュー数倍増で再最適化」判定が正しく働く）
         fsrsOptimizedReviews: (Store.getReviewCount ? Store.getReviewCount() : total)
       });
-      return { ok: true, applied: true, before, after, weights: W, reviews: total, evaluable, holdout: useHoldout, truncated };
+      return { ok: true, applied: true, before, after, weights: W, reviews: total, evaluable,
+        holdout: true, truncated, gain: vsDefault.gain, se: vsDefault.se };
     },
 
     // デフォルトへ戻す
