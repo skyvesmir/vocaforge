@@ -141,16 +141,18 @@
         const res = await FSRSOpt.optimize(pct => {
           optBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i>最適化中… ' + pct + '%';
         });
-        if (!res.ok) {
+        if (!res.ok && res.reason === 'holdout_short') {
+          alert('検証に使える新しい復習履歴が、まだ足りません（' + res.testN + ' / ' + res.needTest + ' 件）。\n学習した履歴で採点すると「良くなった」と間違えてしまうため、もう少し学習を続けてから、再度お試しください。');
+        } else if (!res.ok) {
           alert('復習履歴が足りません（' + res.reviews + ' / ' + res.needed + ' 件）。学習を続けてから再度お試しください。');
         } else if (res.applied) {
           const imp = res.before > 0 ? Math.round((1 - res.after / res.before) * 100) : 0;
           alert('最適化が完了しました！\n\n予測誤差（log loss）: ' + res.before.toFixed(4) + ' → ' + res.after.toFixed(4) +
             (imp > 0 ? '（' + imp + '%改善）' : '') +
             '\n対象レビュー: ' + res.reviews + ' 件' +
-            (res.holdout ? '\n※未使用の新しい履歴で検証済み' : ''));
+            (res.holdout ? '\n※学習に使っていない新しい履歴で検証済み' : ''));
         } else {
-          alert('現在の履歴ではデフォルトパラメータのほうが良好でした。\nパラメータは変更していません。履歴が増えたら再度お試しください。');
+          alert('新しいパラメータが「はっきり良い」とは言えなかったので、変更していません。\n履歴が増えたら、再度お試しください。');
         }
       } catch (e) {
         alert('最適化に失敗しました: ' + e.message);
