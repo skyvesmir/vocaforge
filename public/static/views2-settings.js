@@ -170,7 +170,7 @@
           '</button>';
         return '<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 mb-4 space-y-2">' +
           opt('target1000', 'ターゲット1000', '書籍と同じ並び・Part 1〜5構成（補足・例文つき）', '1000熟語') +
-          opt('full', '全部バージョン', '新データベース全収録／意味カテゴリ別 全48セクション（補足・例文つき）', '3238熟語') +
+          opt('full', '全部バージョン', '新データベース全収録／意味カテゴリ別 全48セクション（補足・例文つき）', '3234熟語') +
           '<p class="text-[11px] text-slate-500 leading-relaxed px-1">同じ熟語の学習進捗は両バージョンで共有されます。切替はいつでも可能です。</p>' +
         '</div>';
       })() +

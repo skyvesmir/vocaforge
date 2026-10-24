@@ -297,7 +297,7 @@
   ],
   "words_full": 6559,
   "words_full_sections": 53,
-  "phrases_full": 3238,
+  "phrases_full": 3234,
   "phrase_full_sections": [
     {
       "section": 1,
@@ -387,7 +387,7 @@
     {
       "section": 18,
       "title": "数・量",
-      "count": 114
+      "count": 113
     },
     {
       "section": 19,
@@ -467,7 +467,7 @@
     {
       "section": 34,
       "title": "接続詞・副詞・前置詞",
-      "count": 198
+      "count": 197
     },
     {
       "section": 35,
@@ -537,7 +537,7 @@
     {
       "section": 48,
       "title": "その他・慣用・諺",
-      "count": 930
+      "count": 928
     }
   ],
   "word_full_sections": [

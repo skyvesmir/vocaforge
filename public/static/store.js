@@ -190,7 +190,7 @@
     leechThreshold: 8,     // 旧設定（間違い回数での判定用）。現在は未使用。リーチは FSRS.isLeech() で判定する
     sectionNewLimit: 50, // セクション明示選択時の1回あたり新規カード数（下限10）
     wordDataset: 'target1900', // 単語DB: 'target1900'(1900語) | 'full'(発音/品詞/例文付き) | 'leap'
-    phraseDataset: 'target1000' // 熟語DB: 'target1000'(1000熟語) | 'full'(3238熟語・補足/例文付き)
+    phraseDataset: 'target1000' // 熟語DB: 'target1000'(1000熟語) | 'full'(3234熟語・補足/例文付き)
   };
 
   function load(key, fallback) {
