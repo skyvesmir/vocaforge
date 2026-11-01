@@ -13,7 +13,7 @@
       group: w.section, groupLabel: (w.sectionCode || ('Section ' + w.section)),
       ipa: w.ipa, pos: w.pos, note: w.note, example: w.example, exampleJa: w.exampleJa, full: true };
   }
-  // 全部バージョン（6559語）: 意味カテゴリ別 全53セクション（例「#01 重要な・ささいな」）
+  // 全部バージョン（6560語）: 意味カテゴリ別 全53セクション（例「#01 重要な・ささいな」）
   function wordFullSectionTitle(sec) {
     const arr = (DATA.meta && DATA.meta.word_full_sections) || [];
     const s = arr.find(x => x.section === sec);
