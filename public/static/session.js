@@ -400,7 +400,7 @@
   function findConfusedEntry(input, card) {
     const ni = Quiz.normalize(input);
     if (!ni || ni.length < 2) return null;
-    // 単語: 全部DBがロード済みならそちら（6559語）、なければ現行DB
+    // 単語: 全部DBがロード済みならそちら（6560語）、なければ現行DB
     const words = VF.DATA.wordsFull || VF.DATA.words || [];
     for (let i = 0; i < words.length; i++) {
       const w = words[i];
