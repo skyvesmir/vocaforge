@@ -32,13 +32,19 @@
 
   // 入力正規化（記入採点用）
   // 括弧は「中身を残して記号のみ除去」する（有無両形の生成は acceptableAnswers 側で行う）
+  // ハイフン: 語の途中のもの（clean-cut, mother-in-law）は残す。ハイフンを打たない答え
+  //   （clean cut, cleancut）は不正解にする。接頭辞・接尾辞の端のもの（spec-, -tion）は
+  //   従来どおり無視する。種類の違うハイフン（‐ ‑ ‒ – − －）は ASCII の - にそろえる。
   function normalize(s) {
     return (s || '').toLowerCase()
       .replace(/[～~]/g, '')
       .replace(/[()（）]/g, '')
-      .replace(/[.．,，!！?？:：;；'’"”\-]/g, '')
+      .replace(/[‐‑‒–−－]/g, '-')
+      .replace(/[.．,，!！?？:：;；'’"”]/g, '')
       .replace(/\s+/g, ' ')
-      .trim();
+      .trim()
+      .replace(/(^| )-+/g, '$1')
+      .replace(/-+(?= |$)/g, '');
   }
 
   // 許容解答の組合せ爆発を防ぐ上限
@@ -175,7 +181,8 @@
     for (const variant of acceptableAnswers(term)) {
       // 熟語の目的語プレースホルダ「～」は先頭・末尾なら除去して照合
       // （例: "a piece of ～" → "a piece of"）。内部に残る場合は照合不可。
-      let words = variant.toLowerCase().split(/\s+/).filter(Boolean);
+      // ハイフンでつながる語（clean-cut）は、例文側の単語分割に合わせて分けて照合する
+      let words = variant.toLowerCase().split(/[\s-]+/).filter(Boolean);
       while (words.length && /^[～~]+$/.test(words[0])) words.shift();
       while (words.length && /^[～~]+$/.test(words[words.length - 1])) words.pop();
       // 末尾の動詞プレースホルダ「to do」「to doing」等は do/doing を除去して照合
