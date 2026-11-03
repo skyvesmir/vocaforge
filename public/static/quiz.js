@@ -121,7 +121,7 @@
     draw: ['drew','drawn'], break: ['broke','broken'], spend: ['spent'],
     cut: ['cut'], rise: ['rose','risen'], drive: ['drove','driven'],
     buy: ['bought'], wear: ['wore','worn'], choose: ['chose','chosen'],
-    seek: ['sought'], throw: ['threw','thrown'], catch: ['caught'],
+    mistake: ['mistook','mistaken'], seek: ['sought'], throw: ['threw','thrown'], catch: ['caught'],
     deal: ['dealt'], win: ['won'], forget: ['forgot','forgotten'],
     fight: ['fought'], teach: ['taught'], eat: ['ate','eaten'],
     sell: ['sold'], strike: ['struck'], fly: ['flew','flown'],
@@ -168,6 +168,9 @@
    * 語の活用形（-s/-ed/-ing 等）にも対応。多語熟語は各語の活用を許容して連続一致。
    * @returns {clozeText, surface} | null（例文中に語が見つからない場合）
    */
+  const WILD_MAX = 5;                 // A/B が一致する最大語数
+  const SENTENCE_BREAK = /[.!?;:]/;   // これをまたぐ語列は A/B とみなさない
+
   function makeCloze(term, example) {
     if (!term || !example) return null;
     // 例文中の英単語トークンと位置を列挙
@@ -182,9 +185,15 @@
       // 熟語の目的語プレースホルダ「～」は先頭・末尾なら除去して照合
       // （例: "a piece of ～" → "a piece of"）。内部に残る場合は照合不可。
       // ハイフンでつながる語（clean-cut）は、例文側の単語分割に合わせて分けて照合する
-      let words = variant.toLowerCase().split(/[\s-]+/).filter(Boolean);
-      while (words.length && /^[～~]+$/.test(words[0])) words.shift();
-      while (words.length && /^[～~]+$/.test(words[words.length - 1])) words.pop();
+      // 見出し語の「A」「B」「C」「D」（大文字1字。A's も同じ）は「何かの語句」を表すプレースホルダ。
+      // 先頭・末尾にあるものは範囲が決まらないので「～」と同様に除去し、
+      // 途中にあるものは例文中の1〜5語に一致するワイルドカードとして扱う。
+      // （小文字の a は冠詞なので区別する。比較のため小文字化はここで行う）
+      const isPh = w => /^[A-D](,|'s)?$/.test(w);
+      let raw = variant.split(/[\s-]+/).filter(Boolean);
+      while (raw.length && (isPh(raw[0]) || /^[～~]+$/.test(raw[0]))) raw.shift();
+      while (raw.length && (isPh(raw[raw.length - 1]) || /^[～~]+$/.test(raw[raw.length - 1]))) raw.pop();
+      let words = raw.map(w => (isPh(w) ? w : w.toLowerCase()));
       // 末尾の動詞プレースホルダ「to do」「to doing」等は do/doing を除去して照合
       // （例: "be likely to do" → "be likely to"）。"make do" 等の実熟語を壊さないよう
       // 直前が to の場合のみ。oneself/others も同様のプレースホルダ扱い。
@@ -192,31 +201,47 @@
         words.pop();
       while (words.length >= 2 && /^(oneself|others)$/.test(words[words.length - 1]))
         words.pop();
-      if (!words.length || words.some(w => !/^[a-z][a-z']*$/.test(w))) continue;
-      const formSets = words.map(inflections);
+      if (!words.length || words.some(w => !isPh(w) && !/^[a-z][a-z']*$/.test(w))) continue;
+      if (isPh(words[words.length - 1])) continue; // 末尾が to do の除去後にワイルドカードで終わる形は範囲が決まらない
+      const els = words.map(w => (isPh(w) ? null : inflections(w))); // null = ワイルドカード
       // be動詞開始の熟語（be aware of 等）は、be の直後に副詞が挟まる形
       // （"is fully aware of"）を許容する（最大2語スキップ）。
-      const allowSkipAfterBe = words[0] === 'be' && words.length >= 2;
-      for (let i = 0; i + words.length <= tokens.length; i++) {
-        let ok = true, ti = i;
-        for (let j = 0; j < words.length; j++) {
-          if (ti >= tokens.length) { ok = false; break; }
-          if (formSets[j].has(tokens[ti].t.toLowerCase())) { ti++; continue; }
-          // be の直後のみ、副詞などの挿入語を最大2語まで読み飛ばす
-          if (allowSkipAfterBe && j === 1) {
-            let skipped = 0, k = ti;
-            while (skipped < 2 && k + 1 < tokens.length && !formSets[j].has(tokens[k].t.toLowerCase())) { k++; skipped++; }
-            if (formSets[j].has(tokens[k].t.toLowerCase())) { ti = k + 1; continue; }
+      const allowSkipAfterBe = words[0] === 'be' && els.length >= 2 && els[1] !== null;
+      // 例文の語列 tokens[ti..] に els[j..] を当てはめ、終了位置（次の語の添字）を返す。なければ -1
+      const matchFrom = (j, ti) => {
+        if (j === els.length) return ti;
+        if (els[j] === null) {
+          for (let len = 1; len <= WILD_MAX && ti + len <= tokens.length; len++) {
+            if (len > 1 && SENTENCE_BREAK.test(example.slice(tokens[ti + len - 2].i + tokens[ti + len - 2].t.length, tokens[ti + len - 1].i))) break;
+            const r = matchFrom(j + 1, ti + len);
+            if (r >= 0) return r;
           }
-          ok = false; break;
+          return -1;
         }
-        if (!ok) continue;
+        const maxSkip = (allowSkipAfterBe && j === 1) ? 2 : 0;
+        for (let skip = 0; skip <= maxSkip; skip++) {
+          const k = ti + skip;
+          if (k >= tokens.length) break;
+          if (els[j].has(tokens[k].t.toLowerCase())) {
+            const r = matchFrom(j + 1, k + 1);
+            if (r >= 0) return r;
+          }
+        }
+        return -1;
+      };
+      for (let i = 0; i < tokens.length; i++) {
+        const ti = matchFrom(0, i);
+        if (ti < 0) continue;
         const start = tokens[i].i;
         const endTok = tokens[ti - 1];
         const end = endTok.i + endTok.t.length;
         const surface = example.slice(start, end);
         const blank = '（　？　）';
-        return { clozeText: example.slice(0, start) + blank + example.slice(end), surface };
+        const hasWild = els.some(e => e === null);
+        const res = { clozeText: example.slice(0, start) + blank + example.slice(end), surface };
+        // ワイルドカードを含む場合は、A の中身が違っても正解にできるよう採点用の型を添える
+        if (hasWild) res.pattern = els.map(e => (e === null ? null : Array.from(e).map(normalize)));
+        return res;
       }
     }
     return null;
@@ -262,7 +287,8 @@
         meaningHint: card.meaning,
         answer: cz.surface,
         term: card.term,
-        acceptable
+        acceptable,
+        pattern: cz.pattern || null
       };
     }
 
@@ -309,7 +335,23 @@
   function gradeTyped(input, q) {
     const ni = normalize(input);
     if (!ni) return false;
-    return q.acceptable.some(a => normalize(a) === ni);
+    if (q.acceptable.some(a => normalize(a) === ni)) return true;
+    // A/B 入りの熟語の穴埋め: 固定部分が合っていれば、A/B の中身は何でもよい
+    return !!(q.pattern && matchPattern(q.pattern, ni.split(/[\s-]+/).filter(Boolean)));
+  }
+
+  // pattern: [活用形の配列 | null(ワイルドカード), ...]。入力の語列 words 全体に一致するか
+  function matchPattern(pattern, words) {
+    const go = (j, ti) => {
+      if (j === pattern.length) return ti === words.length;
+      if (pattern[j] === null) {
+        for (let len = 1; len <= WILD_MAX && ti + len <= words.length; len++)
+          if (go(j + 1, ti + len)) return true;
+        return false;
+      }
+      return ti < words.length && pattern[j].includes(words[ti]) && go(j + 1, ti + 1);
+    };
+    return go(0, 0);
   }
 
   // 編集距離（タイプミス許容ヒント用）
