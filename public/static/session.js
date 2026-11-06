@@ -130,6 +130,7 @@
         '<div class="text-center mb-6"><div class="text-xs text-slate-400 mb-2">例文の空欄に入る英語は？</div>' +
         '<div class="text-xl font-bold leading-relaxed text-left bg-slate-900 border border-slate-800 rounded-xl px-4 py-4">' + br(q.prompt) + '</div>' +
         (q.promptJa ? '<div class="text-sm text-slate-400 mt-3 text-left px-1"><i class="fas fa-language mr-1.5"></i>' + br(q.promptJa) + '</div>' : '') +
+        (q.formNote ? '<div class="text-xs text-amber-400 mt-2 text-left px-1"><i class="fas fa-pen mr-1.5"></i>形に注意: ' + esc(q.formNote) + '</div>' : '') +
         deckBadge +
         '</div>' +
         typeControls('空欄の英語を入力…', osk);
