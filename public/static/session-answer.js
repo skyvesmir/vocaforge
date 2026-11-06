@@ -68,6 +68,9 @@
         card_id: card.id, reviewed_at: now, grade,
         format: q.format,
         elapsed_days: res.elapsed_days,
+        // 入力または選択した答えが合っていたか（客観的な判定）。grade は自己評価で上書きできるので、別に残す。
+        // 上のサーバー送信分（payload.log.correct）と同じ名前・同じ値。別の端末から引いたログも、この名前で入る
+        correct: !!correct,
         duration_ms: now - s.current.shownAt,
         s_before: before.stability || 0, d_before: before.difficulty || 0,
         s_after: res.stability, d_after: res.difficulty

@@ -436,7 +436,9 @@
     const dk = $('#type-dontknow'); if (dk) dk.style.display = 'none';
     // 画面キーボード使用時は、入力用の物理キー受付をここで止める（採点用のキー受付は showGrading が張る）
     dropKeyHandler(VF.STATE.session);
-    // タイプミス（編集距離1）はHard扱いの選択肢を出す
+    // タイプミス（編集距離1）は不正解のまま、「おしい！スペル違い」と表示する。推奨ボタンは Again(1) のまま。
+    // （自動では、タイプミスとスペルの覚え違いを区別できない。Anki でも Hard は「思い出せた」側の評価なので、
+    // 思い出せなかった扱いの入力を Hard に寄せない。つづりの軽いミスだと思う場合は、自分で Hard 以上を選べる）
     const close = !ok && val && Quiz.editDistance(val, q.answer) <= 1 && Quiz.normalize(val).length > 2;
     // 混同検出: 不正解かつタイプミスではない場合、DB内の別の語と一致していないか
     const confused = (!ok && !close && val) ? findConfusedEntry(val, card) : null;
@@ -516,7 +518,9 @@
     if (window.__bindEtymChips) window.__bindEtymChips($('#feedback'));
 
     // デフォルト推奨をハイライト
-    const def = correct ? (extra.close ? 2 : 3) : 1;
+    // 推奨は、正解なら Good(3)、不正解なら Again(1)。close は不正解のときにしか真にならないので、
+    // ここで close を見て Hard(2) に寄せる分岐は、到達しない（Hard は推奨せず、自分で選ぶ）。
+    const def = correct ? 3 : 1;
     const defBtn = document.querySelector('[data-grade="' + def + '"]');
     if (defBtn) defBtn.classList.add('ring-2', 'ring-white/60');
 
