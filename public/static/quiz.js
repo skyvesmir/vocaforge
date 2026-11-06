@@ -136,7 +136,8 @@
     lend: ['lent'], shoot: ['shot'], feed: ['fed'], bind: ['bound'],
     hang: ['hung'], stick: ['stuck'], swing: ['swung'], spring: ['sprang','sprung'],
     burst: ['burst'], spread: ['spread'], cast: ['cast'], shed: ['shed'],
-    child: ['children'], man: ['men'], woman: ['women'], foot: ['feet'],
+    drink: ['drank','drunk'], sleep: ['slept'], bite: ['bit','bitten'], tie: ['tying'], die: ['dying'],
+        child: ['children'], man: ['men'], woman: ['women'], foot: ['feet'],
     tooth: ['teeth'], mouse: ['mice'], person: ['people'],
     criterion: ['criteria'], phenomenon: ['phenomena'], analysis: ['analyses'],
     crisis: ['crises'], hypothesis: ['hypotheses'], medium: ['media'],
@@ -193,8 +194,9 @@
       // 先頭・末尾にあるものは範囲が決まらないので「～」と同様に除去し、
       // 途中にあるものは例文中の1〜5語に一致するワイルドカードとして扱う。
       // （小文字の a は冠詞なので区別する。比較のため小文字化はここで行う）
-      const isPh = w => /^[A-D](,|'s)?$/.test(w);
-      let raw = variant.split(/[\s-]+/).filter(Boolean);
+      // one's / someone's / ～'s（所有格）も同じく「何かの語句」（my, his, her own など）。
+      const isPh = w => /^([A-D](,|'s)?|one's|someone's|[～~]'s)$/.test(w);
+      let raw = variant.replace(/[\u2019]/g, "'").split(/[\s-]+/).filter(Boolean);
       while (raw.length && (isPh(raw[0]) || /^[～~]+$/.test(raw[0]))) raw.shift();
       while (raw.length && (isPh(raw[raw.length - 1]) || /^[～~]+$/.test(raw[raw.length - 1]))) raw.pop();
       let words = raw.map(w => (isPh(w) ? w : w.toLowerCase()));
