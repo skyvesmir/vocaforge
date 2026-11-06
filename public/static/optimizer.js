@@ -103,9 +103,9 @@
             out.push(-(y * Math.log(p) + (1 - y) * Math.log(1 - p)));
           }
         }
+        // fsrs.js の schedule と同じ式（更新前の D で安定度を更新し、D は別に更新する）
+        S = eng.nextStability(D, S, rv.elapsed, rv.grade);
         D = eng.nextDifficulty(D, rv.grade);
-        const base = rv.elapsed < 1 ? 16 : 7;
-        S = Math.max(eng.stabilityUpdate(base, D, S, R, rv.grade), 0.001);
       }
     }
     return out;
@@ -200,8 +200,14 @@
     // 保存済みパラメータを適用（起動時に呼ぶ）
     applySaved() {
       const s = Store.getSettings();
-      if (s.fsrsWeights && FSRS.setWeights(s.fsrsWeights)) return true;
-      return false;
+      if (!s.fsrsWeights) return false;
+      // 式が変わる前に学習した重み（版の記録がない、または版が違う）は使わず、消す。
+      // 旧式に合わせて当てはめた値を、新しい式でそのまま使うと、ずれるため。再最適化で作り直せる。
+      if (s.fsrsWeightsEngine !== FSRS.version) {
+        Store.setSettings({ fsrsWeights: null, fsrsWeightsEngine: null, fsrsOptimizedAt: null, fsrsOptimizedReviews: 0 });
+        return false;
+      }
+      return !!FSRS.setWeights(s.fsrsWeights);
     },
 
     // 最適化本体
@@ -247,6 +253,7 @@
       FSRS.setWeights(W);
       Store.setSettings({
         fsrsWeights: W,
+        fsrsWeightsEngine: FSRS.version,
         fsrsOptimizedAt: Date.now(),
         // 累計回数で記録（ログキャップ後も「レビュー数倍増で再最適化」判定が正しく働く）
         fsrsOptimizedReviews: (Store.getReviewCount ? Store.getReviewCount() : total)
@@ -258,7 +265,7 @@
     // デフォルトへ戻す
     resetToDefault() {
       FSRS.setWeights(FSRS.defaultWeights.slice());
-      Store.setSettings({ fsrsWeights: null, fsrsOptimizedAt: null, fsrsOptimizedReviews: 0 });
+      Store.setSettings({ fsrsWeights: null, fsrsWeightsEngine: null, fsrsOptimizedAt: null, fsrsOptimizedReviews: 0 });
     }
   };
 

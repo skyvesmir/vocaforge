@@ -1,16 +1,28 @@
-/* FSRS-7 スケジューラ実装（2026年最終版）+ 個人最適化対応
- * 参照: open-spaced-repetition/srs-benchmark models/fsrs_v7.py, fsrs_v6.py
- * および同梱ガイド「暗記アルゴリズム大全」6-8節。
+/* FSRS-7（35パラメータの草案版）由来のスケジューラ実装 + 個人最適化対応
  *
- * FSRS-7の要点:
+ * 位置づけ（2026-11-06 に整理）:
+ *  - 参照: open-spaced-repetition/srs-benchmark models/fsrs_v7.py の、
+ *    e274ac36d3（2026-03-21）〜 70cc4387f5（2026-06-30）の版。
+ *    DEFAULT_W（35個）は、この範囲の init_w と完全に一致する。
+ *  - srs-benchmark は 2026-08-30（b4b02549fd）に、FSRS-7 を34パラメータ・長期と短期で
+ *    安定度を2本持つ構造に作り直した。この実装は、その確定版ではない
+ *    （Anki 等に35個の重みを持ち出しても、FSRS-7 としては認識されない）。
+ *  - 式は、上の草案版にそろえてある（安定度の更新に使う難易度は更新前の値、
+ *    長期式と短期式は経過日数で連続的に混合、安定度の上限は36500日）。
+ *    差が残るのは、間隔を整数日・最小1日にすること、±5%のfuzz、最適化が座標降下であること。
+ *  - 式を変えたときは、FSRS.version を変える。個人最適化の重みは、版が違うと使わない。
+ *
+ * FSRS-7（草案版）の要点:
  *  - パラメータ35個（w0..w34）
  *  - 忘却曲線は「デュアルべき関数」: 独立した減衰率を持つ2本の曲線を S に応じて混合
- *  - 安定度更新は長期(base=7)/短期(base=16)の2系統。経過時間<1日は短期式を使用
+ *  - 安定度更新は長期(base=7)/短期(base=16)の2系統を、経過日数で連続的に混合する
+ *    （係数 c = 1 - w26*exp(-w25*経過日数)。経過が短いほど短期式の比重が大きい）
  *  - 小数日インターバル対応（分・時間単位の短期復習でも整合する想起確率）
  *
  * v2での拡張（srs-benchmark / Anki本体の知見に基づく）:
  *  - setWeights(): オンデバイス最適化された個人パラメータへの差し替え
- *    （最適化済み vs デフォルトで84.3%のユーザーが優位: srs-benchmark superiority表）
+ *    （srs-benchmark README: 個人最適化した FSRS-7 は既定より log loss が小さい。
+ *     このアプリの実装での効果は未検証。詳細は optimizer.js の冒頭）
  *  - makeEngine(W): 任意の重みで動く数式エンジン（optimizer.jsのリプレイ評価用）
  *  - スマートfuzz: 間隔±5%のランダム化。復習日の集中と「同じ並びで覚える」癖を防ぐ
  *    （Anki本体のfuzz factorと同じ発想）
@@ -30,12 +42,14 @@
     5.6385, 0.4468, 3.262,              // w4-6  難易度
     2.3054, 0.1688, 1.3325, 0.3524, 0.0049, 0.7503, 0.0896, 0.6625, 1.3, // w7-15 長期安定度
     0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,   // w16-24 短期安定度
-    2.5, 1.0,                           // w25-26 長期短期遷移関数（本実装では未使用: JSは1件逐次のため）
+    2.5, 1.0,                           // w25-26 長期短期遷移関数（c = 1 - w26*exp(-w25*経過日数)）
     0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362, 0.3862 // w27-34 デュアル忘却曲線
   ];
 
+  const VERSION = 'fsrs7-draft35-vf2';
   const DAY = 86400000;
   const S_MIN = 0.001;
+  const S_MAX = 36500;   // 安定度の上限（参照実装と同じ。Anki の最大間隔 100年）
   const clampD = (d) => Math.min(Math.max(d, 1), 10);
 
   // 単一べき関数の想起確率
@@ -134,7 +148,19 @@
       return pls;
     }
 
-    return { retrievability, intervalFromStability, initStability, initDifficulty, nextDifficulty, stabilityUpdate };
+    // 復習後の安定度（参照実装 FSRS-7 草案版と同じ形）:
+    //  - 更新に使う難易度は「更新前」の D（Dold）。新しい D は、保存用に別に計算する
+    //  - 長期式(base=7)と短期式(base=16)を、c = 1 - w26*exp(-w25*経過日数) で連続的に混合
+    //  - 上限 S_MAX（36500日）、下限 S_MIN
+    function nextStability(Dold, S, elapsed, grade) {
+      const R = retrievability(elapsed, S);
+      const sLong = stabilityUpdate(7, Dold, S, R, grade);
+      const sShort = stabilityUpdate(16, Dold, S, R, grade);
+      const c = 1 - W[26] * Math.exp(-W[25] * elapsed);
+      return Math.min(Math.max(c * sLong + (1 - c) * sShort, S_MIN), S_MAX);
+    }
+
+    return { retrievability, intervalFromStability, initStability, initDifficulty, nextDifficulty, stabilityUpdate, nextStability };
   }
 
   // ---- アクティブな重みとエンジン ----
@@ -181,12 +207,9 @@
       elapsed = 0;
     } else {
       elapsed = card.last_review ? Math.max(0, (now - card.last_review) / DAY) : 0;
-      const R = engine.retrievability(elapsed, card.stability);
+      // 安定度の更新には更新前の難易度を使い、新しい難易度は保存用に別に計算する
+      S = engine.nextStability(card.difficulty, card.stability, elapsed, grade);
       D = engine.nextDifficulty(card.difficulty, grade);
-      // FSRS-7: 経過<1日は短期式(base=16)、それ以外は長期式(base=7)
-      const base = elapsed < 1 ? 16 : 7;
-      S = engine.stabilityUpdate(base, D, card.stability, R, grade);
-      S = Math.max(S, S_MIN);
     }
 
     let scheduled;
@@ -223,10 +246,7 @@
         S = engine.initStability(g);
       } else {
         const elapsed = card.last_review ? Math.max(0, (now - card.last_review) / DAY) : 0;
-        const R = engine.retrievability(elapsed, card.stability);
-        const D = engine.nextDifficulty(card.difficulty, g);
-        const base = elapsed < 1 ? 16 : 7;
-        S = Math.max(engine.stabilityUpdate(base, D, card.stability, R, g), S_MIN);
+        S = engine.nextStability(card.difficulty, card.stability, elapsed, g);
       }
       out[g] = engine.intervalFromStability(S, requestRetention);
     }
@@ -263,6 +283,8 @@
     setWeights, getWeights, makeEngine,
     isLeech, LEECH,
     defaultWeights: DEFAULT_W.slice(),
-    version: 7, weights: W
+    // 式を変えたら、この文字列を変える（個人最適化の重みは、版が違うと使わない）
+    version: VERSION,
+    get weights() { return W.slice(); }
   };
 })(window);
