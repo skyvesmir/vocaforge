@@ -181,7 +181,11 @@
     if (!tokens.length) return null;
 
     // term の許容形（括弧・スラッシュ展開）それぞれで連続一致を探す
-    for (const variant of acceptableAnswers(term)) {
+    // 1周目: 見出し語の語が例文で連続している形（従来どおり）。
+    // 2周目: 1周目で見つからないときだけ、語と語の間に例文の語が最大2語入る形を許す
+    // （"hear out" ↔ "Hear me out"、"make a difference" ↔ "make a real difference"）。
+    // 入った語は、人や形容詞が変わっても正解にできるよう、A/B と同じワイルドカードとして採点する。
+    for (const gapMax of [0, 2]) for (const variant of acceptableAnswers(term)) {
       // 熟語の目的語プレースホルダ「～」は先頭・末尾なら除去して照合
       // （例: "a piece of ～" → "a piece of"）。内部に残る場合は照合不可。
       // ハイフンでつながる語（clean-cut）は、例文側の単語分割に合わせて分けて照合する
@@ -207,40 +211,44 @@
       // be動詞開始の熟語（be aware of 等）は、be の直後に副詞が挟まる形
       // （"is fully aware of"）を許容する（最大2語スキップ）。
       const allowSkipAfterBe = words[0] === 'be' && els.length >= 2 && els[1] !== null;
-      // 例文の語列 tokens[ti..] に els[j..] を当てはめ、終了位置（次の語の添字）を返す。なければ -1
+      // 例文の語列 tokens[ti..] に els[j..] を当てはめ、終了位置と採点用の型（pat）を返す。なければ null。
+      // pat の null は「何かの語句（1〜5語）」。ワイルドカードと、2周目で入った語の分に付く
       const matchFrom = (j, ti) => {
-        if (j === els.length) return ti;
+        if (j === els.length) return { end: ti, pat: [] };
         if (els[j] === null) {
           for (let len = 1; len <= WILD_MAX && ti + len <= tokens.length; len++) {
             if (len > 1 && SENTENCE_BREAK.test(example.slice(tokens[ti + len - 2].i + tokens[ti + len - 2].t.length, tokens[ti + len - 1].i))) break;
             const r = matchFrom(j + 1, ti + len);
-            if (r >= 0) return r;
+            if (r) return { end: r.end, pat: [null].concat(r.pat) };
           }
-          return -1;
+          return null;
         }
-        const maxSkip = (allowSkipAfterBe && j === 1) ? 2 : 0;
+        const set = Array.from(els[j]).map(normalize);
+        const beSkip = allowSkipAfterBe && j === 1;
+        const maxSkip = beSkip ? 2 : ((gapMax && j >= 1 && els[j - 1] !== null) ? gapMax : 0);
         for (let skip = 0; skip <= maxSkip; skip++) {
           const k = ti + skip;
           if (k >= tokens.length) break;
+          // 文の切れ目（. ! ? ; :）をまたぐ語は、間に入った語とみなさない
+          if (skip > 0 && !beSkip && SENTENCE_BREAK.test(example.slice(tokens[ti - 1].i + tokens[ti - 1].t.length, tokens[k].i))) break;
           if (els[j].has(tokens[k].t.toLowerCase())) {
             const r = matchFrom(j + 1, k + 1);
-            if (r >= 0) return r;
+            if (r) return { end: r.end, pat: (skip > 0 && !beSkip ? [null] : []).concat([set], r.pat) };
           }
         }
-        return -1;
+        return null;
       };
       for (let i = 0; i < tokens.length; i++) {
-        const ti = matchFrom(0, i);
-        if (ti < 0) continue;
+        const r = matchFrom(0, i);
+        if (!r) continue;
         const start = tokens[i].i;
-        const endTok = tokens[ti - 1];
+        const endTok = tokens[r.end - 1];
         const end = endTok.i + endTok.t.length;
         const surface = example.slice(start, end);
         const blank = '（　？　）';
-        const hasWild = els.some(e => e === null);
         const res = { clozeText: example.slice(0, start) + blank + example.slice(end), surface };
-        // ワイルドカードを含む場合は、A の中身が違っても正解にできるよう採点用の型を添える
-        if (hasWild) res.pattern = els.map(e => (e === null ? null : Array.from(e).map(normalize)));
+        // ワイルドカード（や間に入った語）を含む場合は、その中身が違っても正解にできるよう採点用の型を添える
+        if (r.pat.some(e => e === null)) res.pattern = r.pat;
         return res;
       }
     }
@@ -253,6 +261,17 @@
    * @param format 'mc-ej'|'mc-je'|'type-je'|'cloze'
    * @param pool 同種カード配列（誤答生成元）
    */
+  // 例文中の語が原形から変化しているときの注意（時制・形）。変化なし／判定不能なら ''
+  function formNote(term, surface) {
+    const base = (String(term).replace(/\(.*?\)/g, ' ').split(/[\s/]+/).filter(w => /^[a-z]+$/i.test(w))[0] || '').toLowerCase();
+    const first = (String(surface).split(/[\s,]+/)[0] || '').toLowerCase().replace(/[^a-z']/g, '');
+    if (!base || !first || first === base || base.length < 3) return '';
+    if (!inflections(base).has(first)) return '';
+    if (/ing$/.test(first)) return '-ing 形';
+    if (first === base + 's' || first === base + 'es' || first === base.replace(/y$/, 'ies')) return '三単現（-s）';
+    return '過去形・過去分詞';
+  }
+
   function makeQuestion(card, format, pool) {
     // 語源カードはコア意味が他とかぶりやすい（例「場所」）ので、
     // 意味は短縮せずそのまま（派生併記）使い、識別性を保つ。
@@ -285,6 +304,7 @@
         prompt: cz.clozeText,
         promptJa: card.exampleJa || '',
         meaningHint: card.meaning,
+        formNote: formNote(card.term, cz.surface),
         answer: cz.surface,
         term: card.term,
         acceptable,
