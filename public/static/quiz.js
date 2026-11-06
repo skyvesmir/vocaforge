@@ -233,7 +233,7 @@
           if (skip > 0 && !beSkip && SENTENCE_BREAK.test(example.slice(tokens[ti - 1].i + tokens[ti - 1].t.length, tokens[k].i))) break;
           if (els[j].has(tokens[k].t.toLowerCase())) {
             const r = matchFrom(j + 1, k + 1);
-            if (r) return { end: r.end, pat: (skip > 0 && !beSkip ? [null] : []).concat([set], r.pat) };
+            if (r) return { end: r.end, pat: (skip > 0 && !beSkip ? ['?'] : []).concat([set], r.pat) };
           }
         }
         return null;
@@ -248,7 +248,7 @@
         const blank = '（　？　）';
         const res = { clozeText: example.slice(0, start) + blank + example.slice(end), surface };
         // ワイルドカード（や間に入った語）を含む場合は、その中身が違っても正解にできるよう採点用の型を添える
-        if (r.pat.some(e => e === null)) res.pattern = r.pat;
+        if (r.pat.some(e => e === null || e === '?')) res.pattern = r.pat;
         return res;
       }
     }
@@ -364,8 +364,9 @@
   function matchPattern(pattern, words) {
     const go = (j, ti) => {
       if (j === pattern.length) return ti === words.length;
-      if (pattern[j] === null) {
-        for (let len = 1; len <= WILD_MAX && ti + len <= words.length; len++)
+      if (pattern[j] === null || pattern[j] === '?') {
+        // '?' は2周目で見つけた「間に入る語」。無くても（0語でも）よい
+        for (let len = pattern[j] === '?' ? 0 : 1; len <= WILD_MAX && ti + len <= words.length; len++)
           if (go(j + 1, ti + len)) return true;
         return false;
       }
