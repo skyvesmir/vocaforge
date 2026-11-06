@@ -21,7 +21,7 @@
 (function (global) {
   'use strict';
 
-  const MIN_REVIEWS = 300;   // これ未満では最適化しない（Anki公式は400前後を推奨）
+  const MIN_REVIEWS = 300;   // これ未満では最適化しない
   const MIN_TEST = 50;       // 検証に使う新しいレビュー（経過0.5日以上）の最低件数。これ未満では最適化しない
   const GATE_Z = 2;          // 採用: 対の差の平均が、標準誤差の何倍より大きく良いか
   const GATE_REL = 0.01;     // 採用: 平均 log loss が相対でこれ以上良いこと

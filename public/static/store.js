@@ -9,7 +9,7 @@
   const NS = 'vocaforge:';
   const K = {
     cards: NS + 'cards',     // { [cardId]: {state,stability,difficulty,due,last_review,reps,lapses,is_leech,suspended} }
-    logs: NS + 'logs',       // [ {card_id, reviewed_at, grade, elapsed_days, duration_ms, s_before,d_before,s_after,d_after} ]
+    logs: NS + 'logs',       // [ {card_id, reviewed_at, grade, elapsed_days, duration_ms, s_before,d_before,s_after,d_after, correct(客観的な正誤。旧ログにはない)} ]
     settings: NS + 'settings',
     // 日次記録。1日1レコード。復習ログ(logs)とは完全に別の保存領域で、
     // logs の2万件キャップの影響を受けない（＝日次記録に上限は無い）。
