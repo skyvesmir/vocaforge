@@ -640,9 +640,14 @@
         if (c.stability >= 21) nMature++; else nReview++;
       });
       const logs = this.getLogs();
-      const recent = logs.slice(-200);
-      const correct = recent.filter(l => l.grade >= 3).length;
-      const retention = recent.length ? Math.round(correct / recent.length * 100) : null;
+      // 直近保持率: 直近200回の「復習」で、思い出せた（Again 以外）割合。
+      //  - FSRS・Anki の「保持率」と同じ定義（成功 = grade > 1。Hard は思い出せた側）。設定の目標保持率と比べられる
+      //  - 復習 = すでに学んだカード（s_before > 0）を、1日以上あけて答えたもの。
+      //    新規の初回の解答と、同じ日の再出題（Again の出し直しなど）は、含めない
+      //  - 数が少ないと 0% や 100% にぶれるので、10回未満は出さない
+      const reviews = logs.filter(l => (l.s_before || 0) > 0 && (l.elapsed_days || 0) >= 1).slice(-200);
+      const recalled = reviews.filter(l => l.grade > 1).length;
+      const retention = reviews.length >= 10 ? Math.round(recalled / reviews.length * 100) : null;
       return {
         total, learned: total - nNew, nNew, nLearning, nReview, nMature, nLeech,
         retention, totalReviews: this.getReviewCount(), streak: this.streak()

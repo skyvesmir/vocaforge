@@ -136,7 +136,7 @@
         '<div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-3 text-center">' +
           '<div class="text-2xl font-extrabold">' + st.streak + '</div><div class="text-[10px] opacity-90">連続日数</div></div>' +
         '<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">' +
-          '<div class="text-2xl font-extrabold text-sky-300">' + (st.retention == null ? '—' : st.retention + '%') + '</div><div class="text-[10px] text-slate-400">直近保持率</div></div>' +
+          '<div class="text-2xl font-extrabold text-sky-300">' + (st.retention == null ? '—' : st.retention + '%') + '</div><div class="text-[10px] text-slate-400">直近保持率<br>（直近200回の復習）</div></div>' +
         '<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">' +
           '<div class="text-2xl font-extrabold text-emerald-300">' + st.totalReviews + '</div><div class="text-[10px] text-slate-400">総復習回数</div></div>' +
       '</div>' +
