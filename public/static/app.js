@@ -2,7 +2,7 @@
  * 学習科学ガイド準拠の語彙トレーナー
  * - データ: words.json / phrases.json / etymology.json / meta.json
  * - 出題: mc-ej / mc-je / type-je（能動的想起の強制）
- * - スケジューリング: FSRS-4.5（分散学習・望ましい困難）
+ * - スケジューリング: FSRS-7（分散学習・望ましい困難）
  */
 (function () {
   'use strict';
