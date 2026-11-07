@@ -60,9 +60,12 @@
 
   function start(deck, group) {
     if (deck === 'weak') return startWeak();
-    const { queue, pool, settings, reviewOnly } = buildQueue(deck, group);
+    const { queue, pool, settings, reviewOnly, hiddenDue } = buildQueue(deck, group);
     if (queue.length === 0) {
-      app.innerHTML = emptyState(reviewOnly);
+      // 空の理由: cap=今日の上限に入りきらない期限カードがある／otherDue=ほかのデッキ・セクションに期限カードがある／done=完了
+      const gDue = ns.globalDueTotal ? ns.globalDueTotal() : 0;
+      const reason = hiddenDue > 0 ? 'cap' : (gDue > 0 ? 'otherDue' : 'done');
+      app.innerHTML = emptyState(reviewOnly, reason, reason === 'cap' ? Math.max(hiddenDue, gDue) : gDue, settings);
       bindBack();
       return;
     }
@@ -568,13 +571,27 @@
     return '<div class="bg-slate-900 border border-slate-800 rounded-xl py-4"><div class="text-2xl font-extrabold">' + v + '</div><div class="text-xs text-slate-400 mt-0.5">' + l + '</div></div>';
   }
 
-  function emptyState(reviewOnly) {
-    const msg = reviewOnly
-      ? '復習期限のカードはありません。お疲れさま！新規学習はホームから始められます。'
-      : '復習も新規もありません。新規カードの上限は設定で増やせます。';
+  function emptyState(reviewOnly, reason, dueLeft, settings) {
+    // 上限に達したのに「完了」と出さない。残りは消えず、期限のまま明日以降に回る。
+    let title, msg;
+    if (reason === 'cap') {
+      title = '今日の復習の上限に達しました';
+      msg = 'まだ期限切れが ' + dueLeft + ' 件あり、明日以降に回ります（期限は動かしません）。1日の復習上限（' +
+        ((settings && settings.reviewPerDay) || 200) + '件）は設定で変えられます。';
+    } else if (reason === 'otherDue') {
+      title = reviewOnly ? '復習は完了！' : '先に復習を終わらせましょう';
+      msg = reviewOnly
+        ? '復習期限のカードはありません。お疲れさま！新規学習はホームから始められます。'
+        : 'ほかのデッキに期限切れの復習が ' + dueLeft + ' 件あります。復習が終わると新規学習が解禁されます。';
+    } else {
+      title = reviewOnly ? '復習は完了！' : '今日の分は完了！';
+      msg = reviewOnly
+        ? '復習期限のカードはありません。お疲れさま！新規学習はホームから始められます。'
+        : '復習も新規もありません。新規カードの上限は設定で増やせます。';
+    }
     return '<div class="max-w-xl mx-auto min-h-screen flex flex-col items-center justify-center px-6 text-center">' +
       '<i class="fas fa-mug-hot text-5xl text-slate-600 mb-4"></i>' +
-      '<h1 class="text-xl font-extrabold mb-1">' + (reviewOnly ? '復習は完了！' : '今日の分は完了！') + '</h1>' +
+      '<h1 class="text-xl font-extrabold mb-1">' + title + '</h1>' +
       '<p class="text-slate-400 text-sm mb-6">' + msg + '</p>' +
       '<button id="back-btn" class="bg-brand text-white font-bold rounded-xl py-3 px-8">戻る</button></div>';
   }
