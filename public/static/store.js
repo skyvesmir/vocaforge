@@ -617,12 +617,12 @@
       const all = this.getDailyHistory();
       let count = 0;
       const d = new Date();
-      while (true) {
-        const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-        const rec = all[key];
-        if (rec && (rec.new + rec.review) > 0) { count++; d.setDate(d.getDate() - 1); }
-        else break;
-      }
+      const keyOf = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+      // 弱点ドリルだけの日も学習した日として数える（ドリルは review に数えないため weakDone も見る）
+      const active = r => !!r && (r.new + r.review + r.weakDone) > 0;
+      // 今日まだ解いていなくても、昨日までの連続は切らない（朝に0と出ないように）
+      if (!active(all[keyOf(d)])) d.setDate(d.getDate() - 1);
+      while (active(all[keyOf(d)])) { count++; d.setDate(d.getDate() - 1); }
       return count;
     },
 

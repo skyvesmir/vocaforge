@@ -78,14 +78,20 @@
     }
 
     // 日次カウンタ（既存。壊さない）
+    // new / review は「その日そのカードを初めて解いた」ときだけ数える。
+    // 同じ日の2回目以降（Again の再出題など）と、弱点ドリルの解答は数えない。
+    // 数えると「失敗するほど今日の復習枠が減る」「期限を消化していないのに dueDone が増える」ため。
+    // （最適化用ログ・FSRS の更新は従来どおり全解答を記録する）
     const wasNew = before.state === 'new' || before.state == null;
-    Store.incDaily(wasNew ? 'new' : 'review', now);
+    const answeredToday = !!(before.last_review && Store.todayStr(before.last_review) === Store.todayStr(now));
+    const countsToday = !isWeakDrill && !answeredToday;
+    if (countsToday) Store.incDaily(wasNew ? 'new' : 'review', now);
 
     // ---- 日次記録の新項目（記録のみ。表示側は変えない）----
     // 「正解」は FSRS のボタン（もう一度／難しい／できた／簡単）ではなく、
     // 「入力または選択した答えが合っていたか」の客観判定 = correct を使う。
     // grade は FSRS のスケジューリング専用で、記録には混ぜない。
-    recordDaily(s, card, before, wasNew, correct, now);
+    recordDaily(s, card, before, wasNew, correct, now, countsToday);
 
     // ---- 行単位のクラウド書き込み（送信待ちの箱へ）----
     // 学習データ全体を丸ごと上書きするのをやめ、解いた1枚分だけを送る。
@@ -139,12 +145,12 @@
   }
 
   // 日次記録の新項目をまとめて書く。失敗しても学習は止めない。
-  function recordDaily(s, card, before, wasNew, correct, now) {
+  function recordDaily(s, card, before, wasNew, correct, now, countsToday) {
     try {
       const isNewFirst = (before.reps || 0) === 0;   // このカードの初回解答
-      if (!wasNew) {
-        // 既に学習済みのカード = 期限カードの消化。
-        // 新規カードは（Again 後の再出題を含め）ここに入らない。
+      if (!wasNew && countsToday) {
+        // 既に学習済みのカード = 期限カードの消化（その日の最初の解答だけ）。
+        // 新規カードは（Again 後の再出題を含め）ここに入らない。同じ日の再出題・弱点ドリルも入らない。
         // 新規の分は dueTotal/dueDone に足さず newFirstPassed だけで数える。
         Store.incDailyDueDone(!!correct, now);
       } else if (isNewFirst && correct) {
@@ -168,7 +174,7 @@
 
       // セッション記録（dueDone が 1 以上のセッションだけ入る）。
       // Store 側が startedAt を検証し、未来なら捨て、72時間より古ければ丸める。
-      s._dueDone = (s._dueDone || 0) + (wasNew ? 0 : 1);
+      s._dueDone = (s._dueDone || 0) + ((!wasNew && countsToday) ? 1 : 0);
       if (s._dueDone >= 1) Store.addDailySession(s.startTs, s._dueDone, now);
     } catch (e) { /* 記録の失敗で学習を止めない */ }
   }

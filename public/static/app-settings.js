@@ -124,6 +124,9 @@
           } else if (key === 'newPerDay') {
             document.getElementById('np-val').textContent = el.value;
             Store.setSettings({ newPerDay: parseInt(el.value, 10) });
+          } else if (key === 'reviewPerDay') {
+            document.getElementById('rp-val').textContent = el.value;
+            Store.setSettings({ reviewPerDay: parseInt(el.value, 10) });
           } else if (key === 'sectionNewLimit') {
             document.getElementById('snl-val').textContent = el.value;
             Store.setSettings({ sectionNewLimit: Math.max(10, parseInt(el.value, 10)) });

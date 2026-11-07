@@ -29,6 +29,10 @@
     const st = Store.stats(allIds);
     const wd = dueCounts('words'), pd = dueCounts('phrases'), ed = dueCounts('etym');
     const totalDue = wd.due + pd.due + ed.due;
+    // 今日の上限（reviewPerDay）までに出せる件数と、上限のため明日以降に回る件数を分けて見せる
+    const reviewCap = Store.getSettings().reviewPerDay || 200;
+    const todayDue = Math.min(totalDue, Math.max(0, reviewCap - Store.getDaily(Date.now()).review));
+    const carryDue = totalDue - todayDue;
 
     const card = (deck, title, icon, color, d) =>
       '<button data-go="decks" data-deck="' + deck + '" class="text-left bg-slate-900 hover:bg-slate-800 transition rounded-2xl p-4 border border-slate-800">' +
@@ -54,14 +58,19 @@
       '<div class="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-5 mb-5 shadow-lg shadow-indigo-900/40">' +
         '<div class="flex items-center justify-between">' +
           '<div><div class="text-sm opacity-90">今日の学習</div>' +
-          '<div class="text-3xl font-extrabold">復習 ' + totalDue + ' 件</div>' +
+          '<div class="text-3xl font-extrabold">復習 ' + todayDue + ' 件</div>' +
           '<div class="text-xs opacity-80 mt-1">' +
-            (totalDue > 0 ? 'まず復習から。終わると新規学習が解禁されます' : '復習は完了。新規学習を始めましょう') + '</div></div>' +
+            (totalDue === 0 ? '復習は完了。新規学習を始めましょう'
+              : todayDue === 0 ? '今日の復習の上限（' + reviewCap + '件）に達しました。残り ' + carryDue + ' 件は明日以降に回ります'
+              : 'まず復習から。終わると新規学習が解禁されます' + (carryDue > 0 ? '（上限のため ' + carryDue + ' 件は明日以降）' : '')) + '</div></div>' +
           '<i class="fas fa-bolt text-4xl opacity-30"></i>' +
         '</div>' +
         (totalDue > 0
-          ? '<button data-go="session" data-deck="mix" data-group="due" class="mt-4 w-full bg-white text-indigo-700 font-bold rounded-xl py-3 active:scale-95 transition">' +
-              '<i class="fas fa-play mr-2"></i>復習を開始（' + totalDue + '件）</button>' +
+          ? (todayDue > 0
+              ? '<button data-go="session" data-deck="mix" data-group="due" class="mt-4 w-full bg-white text-indigo-700 font-bold rounded-xl py-3 active:scale-95 transition">' +
+                  '<i class="fas fa-play mr-2"></i>復習を開始（' + todayDue + '件）</button>'
+              : '<div class="mt-4 w-full bg-white/20 text-white font-bold rounded-xl py-3 text-center text-sm">' +
+                  '<i class="fas fa-check mr-2"></i>今日の復習はここまで</div>') +
             '<button data-go="decks" class="mt-2 w-full bg-white/15 text-white font-bold rounded-xl py-2.5 active:scale-95 transition text-sm">' +
               '<i class="fas fa-lock mr-2 opacity-70"></i>新規学習（復習後に解禁）</button>'
           : '<button data-go="decks" class="mt-4 w-full bg-white text-indigo-700 font-bold rounded-xl py-3 active:scale-95 transition">' +

@@ -3,7 +3,7 @@
  * - Retrievability 降順ソート
  * - reviewPerDay / newPerDay の上限適用
  * - セクション選択時の新規上限の例外
- * - 出題ゼロ時のフォールバック
+ * - 出題ゼロのときは、その理由（上限到達／他に期限あり／完了）を返す（自動で別のカードは出さない）
  * - 弱点集中モードの対象抽出（リーチ語のみ）
  */
 (function () {
@@ -46,10 +46,12 @@
     });
 
     // 復習の並び: Retrievability降順（想起確率が高い順）
-    // Anki公式シミュレーション（forums.ankiweb.net "Improving sort orders"）で、
-    // 同じ保持率を最少の学習時間で維持できる最良の並びと結論づけられた方式。
-    // 想起確率が高いうちに復習するほど1回あたりの成功率が高く、
-    // 失敗→再学習のコストを最小化できる（バックログ時に特に有効）。
+    // 上限（reviewPerDay）があるとき、どの期限カードを今日の枠に入れるかの選び方。
+    // Anki フォーラムの提案（forums.ankiweb.net "Improving sort orders"、根拠は FSRS 作者側のシミュレーション）では、
+    // 「上限があるなら、同じ保持率を最少の学習時間で維持できる」とされる。公式の結論ではなく、条件付きの主張。
+    // この実装での理想化シミュレーションでも、期限の古い順より時間コストが約1.5%低く、平均想起確率はほぼ同じ（0.936 対 0.937）。
+    // 一方で、最古の期限超過は長くなる（31日 対 22日）。万能の最良ではなく、時間効率と古いカードの放置を交換する暫定方針。
+    // 選ばれたカードの表示順は、あとで interleave でシャッフルする。
     const rNow = {};
     due.forEach(c => {
       const st = states[c.id];
@@ -84,16 +86,14 @@
       queue = fresh.slice(0, newAllowed);
     }
 
-    // 何も無ければ（=その日完了）フォールバック
-    if (queue.length === 0 && !reviewOnly) {
-      // 復習が無く新規も上限に達した → 全体から期限近い順に少し出す
-      queue = pool.map(c => ({ c, due: (states[c.id] ? states[c.id].due : Infinity) }))
-        .sort((a, b) => a.due - b.due).slice(0, 20).map(x => x.c);
-    }
-
+    // 出題が空のとき、自動で別のカード（期限前・未学習）を出すことはしない。
+    // かつては「期限が近い順に20枚」を出していたが、上限・新規ゲートを入口ごとに迂回し、
+    // 期限前の前倒し復習（安定度の伸びが期限どおりの約2割）まで混ぜてしまっていた。
+    // 代わりに、なぜ空なのかを返して画面で伝える。
     if (settings.interleave) queue = Quiz.shuffle(queue);
     // プール（誤答生成用）は形式別に十分な数が要る
-    return { queue, pool, settings, reviewOnly, dueTotal: due.length };
+    // hiddenDue: 選択プールの期限カードのうち、今日の上限に入りきらなかった枚数
+    return { queue, pool, settings, reviewOnly, dueTotal: due.length, hiddenDue: due.length - dueQueue.length };
   }
 
   // ====== 弱点集中モード（ブートキャンプ） ======
