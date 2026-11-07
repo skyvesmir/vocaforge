@@ -24,7 +24,11 @@
     // 日次レコードの項目名は設計側で確定済みなので、確定フラグはレコードの外に持つ。
     // dueTotal が 0（その日は期限カードが1枚も無かった）でも「確定済み」を表せるようにするため
     // 値そのものでは判定しない。
-    dailyFixed: NS + 'daily_fixed'
+    dailyFixed: NS + 'daily_fixed',
+    // 「あと20件続ける」で足した、その日だけの追加復習枠。{ day:'2026-11-07', n:20 }
+    // 日次レコード(DAILY_SHAPE)には入れない（項目は増やさない）。端末ローカル専用で同期しない。
+    // 日付が変わると自然に無効になる（読み出し側が day を比べる）。
+    reviewExtra: NS + 'review_extra'
   };
 
   // ---- 日次記録のスキーマ ----
@@ -396,6 +400,21 @@
     },
     // 生のまま（マイグレーションや同期の内部用）
     getDailyRaw() { return load(K.daily, {}); },
+
+    // ---- 追加復習枠（上限到達後のボタン用・ローカル専用）----
+    // save() を通さない＝更新時刻を進めず、クラウド同期の対象にもしない。
+    getReviewExtra(now) {
+      try {
+        const v = load(K.reviewExtra, null);
+        if (v && v.day === todayStr(now) && v.n > 0) return v.n | 0;
+      } catch (e) {}
+      return 0;
+    },
+    addReviewExtra(n, now) {
+      const next = this.getReviewExtra(now) + Math.max(0, n | 0);
+      try { localStorage.setItem(K.reviewExtra, JSON.stringify({ day: todayStr(now), n: next })); } catch (e) {}
+      return next;
+    },
 
     // ---- 日次記録の更新（新項目用）----
     // incDaily() は壊さず、新項目はこちらで書く。

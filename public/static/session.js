@@ -67,6 +67,8 @@
       const reason = hiddenDue > 0 ? 'cap' : (gDue > 0 ? 'otherDue' : 'done');
       app.innerHTML = emptyState(reviewOnly, reason, reason === 'cap' ? Math.max(hiddenDue, gDue) : gDue, settings);
       bindBack();
+      const eb = $('#extra-btn');
+      if (eb) eb.onclick = () => ns.continueReview();
       return;
     }
     VF.STATE.route = 'session';
@@ -593,7 +595,11 @@
       '<i class="fas fa-mug-hot text-5xl text-slate-600 mb-4"></i>' +
       '<h1 class="text-xl font-extrabold mb-1">' + title + '</h1>' +
       '<p class="text-slate-400 text-sm mb-6">' + msg + '</p>' +
-      '<button id="back-btn" class="bg-brand text-white font-bold rounded-xl py-3 px-8">戻る</button></div>';
+      (reason === 'cap'
+        ? '<button id="extra-btn" class="bg-brand text-white font-bold rounded-xl py-3 px-8 mb-3 active:scale-95 transition">' +
+            '<i class="fas fa-forward mr-2"></i>あと' + Math.min(20, dueLeft) + '件続ける</button>'
+        : '') +
+      '<button id="back-btn" class="' + (reason === 'cap' ? 'text-slate-400 text-sm py-2 px-6' : 'bg-brand text-white font-bold rounded-xl py-3 px-8') + '">戻る</button></div>';
   }
   function bindBack() { const b = $('#back-btn'); if (b) b.onclick = () => VF.go('home'); }
 

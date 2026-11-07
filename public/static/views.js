@@ -31,7 +31,9 @@
     const totalDue = wd.due + pd.due + ed.due;
     // 今日の上限（reviewPerDay）までに出せる件数と、上限のため明日以降に回る件数を分けて見せる
     const reviewCap = Store.getSettings().reviewPerDay || 200;
-    const todayDue = Math.min(totalDue, Math.max(0, reviewCap - Store.getDaily(Date.now()).review));
+    // 「あと20件続ける」で足した今日だけの枠（上限そのものは変えない）
+    const extraToday = Store.getReviewExtra ? Store.getReviewExtra(Date.now()) : 0;
+    const todayDue = Math.min(totalDue, Math.max(0, reviewCap + extraToday - Store.getDaily(Date.now()).review));
     const carryDue = totalDue - todayDue;
 
     const card = (deck, title, icon, color, d) =>
@@ -70,7 +72,9 @@
               ? '<button data-go="session" data-deck="mix" data-group="due" class="mt-4 w-full bg-white text-indigo-700 font-bold rounded-xl py-3 active:scale-95 transition">' +
                   '<i class="fas fa-play mr-2"></i>復習を開始（' + todayDue + '件）</button>'
               : '<div class="mt-4 w-full bg-white/20 text-white font-bold rounded-xl py-3 text-center text-sm">' +
-                  '<i class="fas fa-check mr-2"></i>今日の復習はここまで</div>') +
+                  '<i class="fas fa-check mr-2"></i>今日の復習はここまで</div>' +
+                '<button data-extra-review class="mt-2 w-full bg-white text-indigo-700 font-bold rounded-xl py-3 active:scale-95 transition">' +
+                  '<i class="fas fa-forward mr-2"></i>あと' + Math.min(20, carryDue) + '件続ける</button>') +
             '<button data-go="decks" class="mt-2 w-full bg-white/15 text-white font-bold rounded-xl py-2.5 active:scale-95 transition text-sm">' +
               '<i class="fas fa-lock mr-2 opacity-70"></i>新規学習（復習後に解禁）</button>'
           : '<button data-go="decks" class="mt-4 w-full bg-white text-indigo-700 font-bold rounded-xl py-3 active:scale-95 transition">' +

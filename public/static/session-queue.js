@@ -24,6 +24,15 @@
   }
   window.__hasGlobalDueReviews = hasGlobalDueReviews;
 
+  // 上限に達したあと、ボタンで今日だけ復習枠を足して続ける。
+  // 足すのは枠だけ。期限・並び順（R降順）・新規カードの解禁条件は一切変えない。
+  const EXTRA_STEP = 20;
+  ns.EXTRA_STEP = EXTRA_STEP;
+  ns.continueReview = function () {
+    Store.addReviewExtra(EXTRA_STEP, Date.now());
+    window.__startSession('mix', 'due');
+  };
+
   function buildQueue(deck, group) {
     const settings = Store.getSettings();
     const now = Date.now();
@@ -60,7 +69,9 @@
     });
     due.sort((a, b) => rNow[b.id] - rNow[a.id]);
 
-    let revAllowed = Math.max(0, settings.reviewPerDay - daily.review);
+    // 「あと20件続ける」で足した今日だけの枠（ローカル専用）。上限の数字そのものは変えない。
+    const extraToday = Store.getReviewExtra ? Store.getReviewExtra(now) : 0;
+    let revAllowed = Math.max(0, settings.reviewPerDay + extraToday - daily.review);
     const dueQueue = due.slice(0, revAllowed);
 
     // 復習専用モード: ①ホームの「復習を開始」(group==='due') か ②復習がまだ残っている間は新規を出さない

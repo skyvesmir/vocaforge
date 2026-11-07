@@ -76,6 +76,11 @@
       };
     });
 
+    // 上限到達後の「あと20件続ける」
+    document.querySelectorAll('[data-extra-review]').forEach(b => {
+      b.onclick = () => { if (window.__VFSession && window.__VFSession.continueReview) window.__VFSession.continueReview(); };
+    });
+
     // フラッシュカードモード入口
     const fe = document.getElementById('flash-entry');
     if (fe) fe.onclick = () => window.__openFlash(window.__browseFilter.deck);
