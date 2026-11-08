@@ -71,7 +71,9 @@
 
     // 「あと20件続ける」で足した今日だけの枠（ローカル専用）。上限の数字そのものは変えない。
     const extraToday = Store.getReviewExtra ? Store.getReviewExtra(now) : 0;
-    let revAllowed = Math.max(0, settings.reviewPerDay + extraToday - daily.review);
+    // 上限OFFのときは期限カードを全部出す（上限・追加枠・hiddenDue は意味を持たない）
+    const capOn = settings.reviewCapEnabled !== false;
+    let revAllowed = capOn ? Math.max(0, settings.reviewPerDay + extraToday - daily.review) : Infinity;
     const dueQueue = due.slice(0, revAllowed);
 
     // 復習専用モード: ①ホームの「復習を開始」(group==='due') か ②復習がまだ残っている間は新規を出さない

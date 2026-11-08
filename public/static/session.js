@@ -399,7 +399,7 @@
       else if (i === chosenIdx) b.className = 'opt w-full text-left bg-rose-500/15 border-2 border-rose-500 rounded-xl px-4 py-3.5 font-medium';
       else b.className = 'opt w-full text-left bg-slate-900 border-2 border-slate-800 rounded-xl px-4 py-3.5 font-medium opacity-50';
     });
-    showGrading(card, q, correct, correct ? 3 : 1);
+    showGrading(card, q, correct, correct ? 3 : 1, correct ? {} : { wrongPick: chosen });
   }
 
   // 混同検出: 入力が出題とは別のDB内単語・熟語と一致していないか調べる
@@ -457,6 +457,25 @@
     const s = VF.STATE.session;
     const detailBtn = card.deck === 'etym'
       ? '<button id="etym-more" class="mt-3 text-xs text-amber-300"><i class="fas fa-dna mr-1"></i>語源の詳細を見る</button>' : '';
+    // 間違えたときは、正解のカードの詳細（発音・品詞・補足・例文・語源・類義語）をいつでも開けるようにする。
+    // 語源カードには専用の「語源の詳細を見る」があるので、ここには出さない。
+    const answerMoreBtn = (!correct && card.deck !== 'etym')
+      ? '<button id="answer-more" class="mt-3 text-xs text-sky-300"><i class="fas fa-magnifying-glass mr-1"></i>「' + esc(card.term) + '」の詳細を見る</button>' : '';
+    // 選択式で選んでしまった間違いの選択肢が、どの語・熟語だったか（混同の確認用）
+    const wp = extra.wrongPick;
+    const wrongPickBlock = (wp && wp.cardId)
+      ? '<div class="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3">' +
+          '<div class="flex items-center gap-2 text-rose-300 text-xs font-bold mb-1">' +
+            '<i class="fas fa-hand-pointer"></i>選んだのは別の語です</div>' +
+          '<div class="text-sm">' + (q.format === 'mc-ej'
+            ? '選んだ「' + esc(wp.t) + '」は「<span class="font-bold">' + esc(wp.term) + '</span>」の意味です'
+            : '選んだ「<span class="font-bold">' + esc(wp.term) + '</span>」は別の' +
+              (wp.deck === 'phrases' ? '熟語' : (wp.deck === 'etym' ? '語源カード' : '単語')) +
+              'です（' + esc(Quiz.shortMeaning(wp.meaning)) + '）') + '</div>' +
+          '<button id="wrongpick-more" class="mt-2 text-xs text-rose-300">' +
+            '<i class="fas fa-magnifying-glass mr-1"></i>「' + esc(wp.term) + '」の詳細を見る</button>' +
+        '</div>'
+      : '';
     // 単語カード: 関連する語源カードへのリンクチップ（語源経由の記憶フックを提供）
     const etymChips = (card.deck === 'words' && window.__etymLinkChips) ? window.__etymLinkChips(card.id) : '';
     // 混同していた別の単語・熟語の案内（記入式で別のDB語を入力した場合）
@@ -492,6 +511,8 @@
         clozeBlock +
         etymChips +
         detailBtn +
+        answerMoreBtn +
+        wrongPickBlock +
         confusedBlock +
       '</div>';
 
@@ -535,6 +556,10 @@
     });
     const em = $('#etym-more');
     if (em) em.onclick = () => showEtymDetail(card.etymRef);
+    const am = $('#answer-more');
+    if (am) am.onclick = () => window.__showCardDetail(card.id, card.deck);
+    const wm = $('#wrongpick-more');
+    if (wm) wm.onclick = () => window.__showCardDetail(wp.cardId, wp.deck);
     const cm = $('#confused-more');
     if (cm) cm.onclick = () => window.__showCardDetail(extra.confused.id, extra.confused.deck);
 

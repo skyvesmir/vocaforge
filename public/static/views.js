@@ -33,7 +33,8 @@
     const reviewCap = Store.getSettings().reviewPerDay || 200;
     // 「あと20件続ける」で足した今日だけの枠（上限そのものは変えない）
     const extraToday = Store.getReviewExtra ? Store.getReviewExtra(Date.now()) : 0;
-    const todayDue = Math.min(totalDue, Math.max(0, reviewCap + extraToday - Store.getDaily(Date.now()).review));
+    const capOn = Store.getSettings().reviewCapEnabled !== false;
+    const todayDue = capOn ? Math.min(totalDue, Math.max(0, reviewCap + extraToday - Store.getDaily(Date.now()).review)) : totalDue;
     const carryDue = totalDue - todayDue;
 
     const card = (deck, title, icon, color, d) =>

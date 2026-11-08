@@ -35,12 +35,19 @@
   // ハイフン: 語の途中のもの（clean-cut, mother-in-law）は残す。ハイフンを打たない答え
   //   （clean cut, cleancut）は不正解にする。接頭辞・接尾辞の端のもの（spec-, -tion）は
   //   従来どおり無視する。種類の違うハイフン（‐ ‑ ‒ – − －）は ASCII の - にそろえる。
+  // 打てない文字の扱い: アクセント付き文字は基底文字にする（résumé → resume）。
+  //   見出し語の「…」「+」「人」「比較級」は記号・説明であって打つ文字ではないので、
+  //   ～ と同じく無視する（so ～ that … → "so that"、all the + 比較級 → "all the"）。
+  //   これで画面キーボード・物理キーボードのどちらでも、全てのカードが打てる。
   function normalize(s) {
     return (s || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[～~]/g, '')
       .replace(/[()（）]/g, '')
       .replace(/[‐‑‒–−－]/g, '-')
       .replace(/[.．,，!！?？:：;；'’"”]/g, '')
+      .replace(/[…+]/g, ' ')
+      .replace(/[^\x20-\x7e]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .replace(/(^| )-+/g, '$1')
@@ -317,7 +324,9 @@
     // 多肢選択: 誤答3つを同プールから抽出
     const distractors = shuffle(pool.filter(p => p.id !== card.id));
     const picked = [];
-    const seen = new Set([card.term]);
+    // 重複除けの初期値: 英→日の選択式では並ぶのは「日本語の意味」なので、正解の意味も入れておく
+    // （入れないと、正解と同じ日本語の選択肢が誤答として混ざることがある）。
+    const seen = new Set([format === 'mc-ej' ? meaningLabel(card.meaning) : card.term]);
     for (const d of distractors) {
       if (picked.length >= 3) break;
       const key = format === 'mc-ej' ? meaningLabel(d.meaning) : d.term;
@@ -328,8 +337,8 @@
 
     if (format === 'mc-ej') {
       const correct = meaningLabel(card.meaning);
-      const opts = shuffle([{ t: correct, correct: true, full: card.meaning }]
-        .concat(picked.map(p => ({ t: meaningLabel(p.meaning), correct: false, full: p.meaning }))));
+      const opts = shuffle([{ t: correct, correct: true, full: card.meaning, cardId: card.id, deck: card.deck, term: card.term, meaning: card.meaning }]
+        .concat(picked.map(p => ({ t: meaningLabel(p.meaning), correct: false, full: p.meaning, cardId: p.id, deck: p.deck, term: p.term, meaning: p.meaning }))));
       return {
         format, cardId: card.id,
         questionLabel: '英語の意味を選択',
@@ -339,8 +348,8 @@
         meaning: card.meaning
       };
     } else { // mc-je
-      const opts = shuffle([{ t: card.term, correct: true }]
-        .concat(picked.map(p => ({ t: p.term, correct: false }))));
+      const opts = shuffle([{ t: card.term, correct: true, cardId: card.id, deck: card.deck, term: card.term, meaning: card.meaning }]
+        .concat(picked.map(p => ({ t: p.term, correct: false, cardId: p.id, deck: p.deck, term: p.term, meaning: p.meaning }))));
       return {
         format, cardId: card.id,
         questionLabel: '日本語に合う英語を選択',
