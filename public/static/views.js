@@ -113,6 +113,20 @@
           '<span class="w-9 h-9 rounded-xl flex items-center justify-center bg-sky-500/20 text-sky-300 mb-2"><i class="fas fa-chart-line"></i></span>' +
           '<div class="font-bold">学習統計</div><div class="text-xs text-slate-400 mt-1">進捗・保持率を確認</div></button>' +
       '</div>' +
+      // テスター版だけ: 開発者への意見フォーム（config.js の FEEDBACK_URL があるときのみ）
+      (function () {
+        const url = window.VF_CONFIG && window.VF_CONFIG.FEEDBACK_URL;
+        if (!url || !/^https:\/\/docs\.google\.com\/forms\//.test(url)) return '';
+        return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" class="block mt-5 bg-slate-900 hover:bg-slate-800 transition rounded-2xl p-4 border border-slate-800">' +
+          '<div class="flex items-center justify-between">' +
+            '<div class="flex items-center gap-3">' +
+              '<span class="w-10 h-10 rounded-xl bg-brand/20 text-brand flex items-center justify-center"><i class="fas fa-envelope text-lg"></i></span>' +
+              '<div><div class="font-bold">開発者へメッセージ</div>' +
+              '<div class="text-xs text-slate-400 mt-0.5">不便な点・追加してほしい単語や熟語を送る</div></div>' +
+            '</div>' +
+            '<i class="fas fa-arrow-up-right-from-square text-slate-500"></i>' +
+          '</div></a>';
+      })() +
       VF.nav('home') + '</div>';
   };
 
