@@ -53,6 +53,14 @@
           '<button id="logout-btn" class="w-full bg-slate-800 text-slate-300 border border-slate-700 rounded-xl py-2.5 text-sm font-bold">' +
             '<i class="fas fa-right-from-bracket mr-2"></i>ログアウト</button>' +
         '</div>';
+    } else if ((window.VF_CONFIG && window.VF_CONFIG.TESTER) || (auth && auth.cloudAvailable === false)) {
+      // テスター版（build:tester）や接続設定なしの環境: ログインは出さない
+      accountHtml =
+        '<div class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">' +
+          '<div class="text-sm font-bold mb-1"><i class="fas fa-flask mr-2 text-brand"></i>' +
+          ((window.VF_CONFIG && window.VF_CONFIG.TESTER) ? 'テスター版' : 'ローカルのみ') + '</div>' +
+          '<p class="text-xs text-slate-400 leading-relaxed">ログインとクラウド同期はありません。学習データはこの端末のブラウザだけに保存されます。ブラウザのデータを消すと失われます。</p>' +
+        '</div>';
     } else {
       accountHtml =
         '<div class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">' +
