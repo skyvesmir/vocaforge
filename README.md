@@ -145,6 +145,15 @@ npm run preview
 
 `config.js` の接続先は作者の Supabase プロジェクトです。フォークして使う場合は、自分のプロジェクトを用意して `config.js` を書き換えてください。ログインしなくても、ローカルだけで学習はできます。
 
+### テスター版（ログイン・クラウド同期なし）
+
+同じコードから、ログインのないテスター版を別にデプロイできます。
+
+- ビルドコマンド: `npm run build:tester`（出力先は通常と同じ `dist`）
+- `vite build` のあとに `dist/static/config.js` を「接続先なし」の設定へ差し替えるだけです。ソースの `config.js` と本番ビルド（`npm run build`）は変わりません。
+- 設定画面のログイン欄は「テスター版」の説明に置き換わります。学習データはその端末のブラウザ（localStorage）だけに保存され、本番のデータとは混ざりません。
+- Cloudflare Pages では、同じリポジトリの `main` を指す別プロジェクトを作り、ビルドコマンドに `npm run build:tester`、出力ディレクトリに `dist` を指定します。
+
 - Authentication → Providers で **Google を有効化**（Google Cloud の OAuth クライアントID/シークレットを登録）。
 - Authentication → URL Configuration の **Redirect URLs** に、公開URLとローカルのURL（`http://localhost:5173` など）を追加。
 - **`user_data` テーブルを作成**し、RLS を有効化して「本人の行のみ読み書き可」ポリシーを設定（下記SQL）。
