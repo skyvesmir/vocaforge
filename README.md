@@ -151,6 +151,7 @@ npm run preview
 
 - ビルドコマンド: `npm run build:tester`（出力先は通常と同じ `dist`）
 - `vite build` のあとに `dist/static/config.js` を「接続先なし」の設定へ差し替えるだけです。ソースの `config.js` と本番ビルド（`npm run build`）は変わりません。
+- ホームの下部に「開発者へメッセージ」カードが出ます（Google フォームへ新しいタブで遷移）。送り先は `scripts/build-tester.mjs` の `FEEDBACK_URL` で、本番ビルドには入りません。
 - 設定画面のログイン欄は「テスター版」の説明に置き換わります。学習データはその端末のブラウザ（localStorage）だけに保存され、本番のデータとは混ざりません。
 - Cloudflare Pages では、同じリポジトリの `main` を指す別プロジェクトを作り、ビルドコマンドに `npm run build:tester`、出力ディレクトリに `dist` を指定します。
 

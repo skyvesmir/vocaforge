@@ -15,6 +15,10 @@ if (!existsSync('dist/static')) {
 }
 writeFileSync(target,
 `/* テスター版: scripts/build-tester.mjs が生成。クラウド同期・ログインなし（学習データはこの端末だけに保存）。 */
-window.VF_CONFIG = { SUPABASE_URL: '', SUPABASE_ANON_KEY: '', TESTER: true };
+window.VF_CONFIG = {
+  SUPABASE_URL: '', SUPABASE_ANON_KEY: '', TESTER: true,
+  // ホームの「開発者へメッセージ」の送り先（Google フォーム）
+  FEEDBACK_URL: 'https://docs.google.com/forms/d/e/1FAIpQLSenyf30NGhMKTrhvE9MJDuHDpJdRY-b_8DpiRSOtf7yVb-PTg/viewform?usp=header'
+};
 `);
 console.log('テスター版: ' + target + ' をクラウド接続なしの設定に差し替えました');
