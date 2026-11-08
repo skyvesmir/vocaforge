@@ -114,6 +114,8 @@
             Store.setSettings({ formats: s.formats });
           } else {
             Store.setSettings({ [key]: el.checked });
+            // 復習上限のON/OFFは、スライダーの出し入れのため再描画する
+            if (key === 'reviewCapEnabled') render();
           }
         };
       } else if (el.type === 'range') {

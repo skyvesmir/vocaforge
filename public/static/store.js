@@ -187,8 +187,8 @@
     requestRetention: 0.9,
     newPerDay: 20,
     reviewPerDay: 200,
+    reviewCapEnabled: true, // 1日の復習上限を使うか。falseなら期限が来たカードを全部出す（長く休んだ後は1日目に大量に出る）
     interleave: true,
-    strictInput: false,    // 入力採点: trueで完全一致, falseで正規化緩め
     onScreenKeyboard: true, // 記入式でアプリ内の画面キーボードを使う（タッチ端末のみ。PCなど物理キーボードの端末では無効）
     formats: { 'mc-ej': true, 'mc-je': true, 'type-je': true, 'cloze': true }, // 有効な出題形式（cloze=例文穴埋め・復習用）
     leechThreshold: 8,     // 旧設定（間違い回数での判定用）。現在は未使用。リーチは FSRS.isLeech() で判定する

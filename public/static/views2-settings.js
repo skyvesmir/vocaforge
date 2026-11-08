@@ -185,9 +185,13 @@
         '<div class="py-3"><div class="text-sm font-medium mb-2">1日の新規カード上限 <span class="text-brand font-bold" id="np-val">' + s.newPerDay + '</span></div>' +
           '<input type="range" min="5" max="80" step="5" value="' + s.newPerDay + '" data-set="newPerDay" class="w-full accent-indigo-500">' +
           '<div class="text-xs text-slate-400 mt-1">燃え尽き防止。毎日続けられるペースに（分散効果）。</div></div>' +
-        '<div class="py-3"><div class="text-sm font-medium mb-2">1日の復習上限 <span class="text-brand font-bold" id="rp-val">' + (s.reviewPerDay || 200) + '</span></div>' +
-          '<input type="range" min="50" max="500" step="10" value="' + (s.reviewPerDay || 200) + '" data-set="reviewPerDay" class="w-full accent-indigo-500">' +
-          '<div class="text-xs text-slate-400 mt-1">1日に出す復習の上限。新規を毎日20枚続けると、復習は1日およそ200枚に落ち着くのが目安（Anki マニュアル）。上限に入らなかった分は期限のまま明日以降に回ります。</div></div>' +
+        toggle('reviewCapEnabled', '1日の復習上限を使う', s.reviewCapEnabled !== false,
+          'OFFにすると、期限が来たカードを全部出します。長く休んだあとは、1日目に復習が大量に出ます') +
+        (s.reviewCapEnabled !== false
+          ? '<div class="py-3"><div class="text-sm font-medium mb-2">1日の復習上限 <span class="text-brand font-bold" id="rp-val">' + (s.reviewPerDay || 200) + '</span></div>' +
+            '<input type="range" min="50" max="500" step="10" value="' + (s.reviewPerDay || 200) + '" data-set="reviewPerDay" class="w-full accent-indigo-500">' +
+            '<div class="text-xs text-slate-400 mt-1">1日に出す復習の上限。新規を毎日20枚続けると、復習は1日およそ200枚に落ち着くのが目安（Anki マニュアル）。上限に入らなかった分は期限のまま明日以降に回ります。</div></div>'
+          : '') +
         '<div class="py-3"><div class="text-sm font-medium mb-2">セクション学習の新規カード数 <span class="text-brand font-bold" id="snl-val">' + (s.sectionNewLimit || 50) + '</span></div>' +
           '<input type="range" min="10" max="100" step="5" value="' + (s.sectionNewLimit || 50) + '" data-set="sectionNewLimit" class="w-full accent-indigo-500">' +
           '<div class="text-xs text-slate-400 mt-1">セクションを選んで学習するときの1回あたりの新規カード数（下限10）。</div></div>' +
@@ -204,7 +208,6 @@
       '<h2 class="text-sm font-bold text-slate-300 mb-2">学習動作</h2>' +
       '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
         toggle('interleave', 'インターリービング', s.interleave, 'カテゴリを混ぜて出題（交互練習で識別力↑）') +
-        toggle('strictInput', '記入を厳密採点', s.strictInput, 'OFFなら大小文字・記号の差を許容') +
         toggle('onScreenKeyboard', '画面キーボードで入力', s.onScreenKeyboard !== false,
           '記入式でOSのキーボードを出さず、アプリ内のキーボードで入力します（画面が上下に動きません）。スマホ・タブレット用で、PCでは常に通常の入力欄です') +
       '</div>' +
