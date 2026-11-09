@@ -107,13 +107,13 @@
           : '') +
       '</div>';
 
-    // ---- カロのヒント（画面の隅の案内役。端末ごとに保存。クラウドには同期しない）----
+    // ---- ヒント（画面の隅の案内役。端末ごとに保存。クラウドには同期しない）----
     const karoOn = window.VFKaro ? window.VFKaro.enabled() : true;
     const karoHtml = window.VFKaro
       ? '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4">' +
           '<label class="flex items-center justify-between py-3 cursor-pointer">' +
-            '<span><span class="text-sm font-medium">カロのヒント</span>' +
-            '<span class="block text-xs text-slate-400 mt-0.5">画面の隅にカロが出て、タップするとその画面の使い方を教えてくれます。はじめて見る画面では、最初の1回だけ自動で開きます。この端末だけの設定です</span></span>' +
+            '<span><span class="text-sm font-medium">ヒント</span>' +
+            '<span class="block text-xs text-slate-400 mt-0.5">画面の隅のアイコンをタップすると、その画面の使い方を教えてくれます。はじめて見る画面では、最初の1回だけ自動で開きます。この端末だけの設定です</span></span>' +
             '<input type="checkbox" data-karo-toggle ' + (karoOn ? 'checked' : '') + ' class="w-11 h-6 appearance-none rounded-full bg-slate-700 checked:bg-brand relative transition cursor-pointer toggle"></label>' +
         '</div>'
       : '';
