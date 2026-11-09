@@ -14,11 +14,12 @@
   // 復習が残っているか（全デッキ横断）。新規学習の解禁判定に使う。
   function hasGlobalDueReviews(now) {
     now = now || Date.now();
+    const limit = Store.dueLimit(now);   // 期限は日単位で判定（store.js dueLimit 参照）
     const states = Store.getAllCards();
     const all = [].concat(VF.deckCards('words'), VF.deckCards('phrases'), VF.deckCards('etym'));
     for (let i = 0; i < all.length; i++) {
       const s = states[all[i].id];
-      if (s && s.state !== 'new' && s.due <= now) return true;
+      if (s && s.state !== 'new' && s.due < limit) return true;
     }
     return false;
   }
@@ -36,6 +37,7 @@
   function buildQueue(deck, group) {
     const settings = Store.getSettings();
     const now = Date.now();
+    const dueBefore = Store.dueLimit(now);   // 期限は日単位で判定（store.js dueLimit 参照）
     const states = Store.getAllCards();
     const daily = Store.getDaily(now);
 
@@ -51,7 +53,7 @@
     pool.forEach(c => {
       const s = states[c.id];
       if (!s || s.state === 'new') fresh.push(c);
-      else if (s.due <= now) due.push(c);
+      else if (s.due < dueBefore) due.push(c);
     });
 
     // 復習の並び: Retrievability降順（想起確率が高い順）
@@ -137,12 +139,13 @@
   // （buildQueue の dueTotal は選択プール内の数なので日次記録には使えない）。
   function globalDueTotal(now) {
     now = now || Date.now();
+    const limit = Store.dueLimit(now);   // 期限は日単位（復習キュー・ホームの件数と同じ判定）
     const states = Store.getAllCards();
     const all = [].concat(VF.deckCards('words'), VF.deckCards('phrases'), VF.deckCards('etym'));
     let n = 0;
     for (let i = 0; i < all.length; i++) {
       const s = states[all[i].id];
-      if (s && s.state !== 'new' && s.due <= now) n++;
+      if (s && s.state !== 'new' && s.due < limit) n++;
     }
     return n;
   }

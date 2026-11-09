@@ -102,6 +102,7 @@ app.get('/', (c) => {
   <script src="/static/app-data.js"></script>
   <script src="/static/app-router.js"></script>
   <script src="/static/app-settings.js"></script>
+  <script src="/static/karo.js"></script>
   <script src="/static/app-account.js"></script>
   <script src="/static/views.js"></script>
   <script src="/static/views2-stats.js"></script>

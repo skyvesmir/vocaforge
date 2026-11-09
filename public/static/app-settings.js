@@ -36,6 +36,13 @@
         render();
       };
     });
+    // カロのヒント（端末ごと。同期しない）
+    document.querySelectorAll('[data-karo-toggle]').forEach(el => {
+      el.onchange = () => {
+        if (window.VFKaro) window.VFKaro.setEnabled(el.checked);
+        render(); // 設定画面のカロを出し入れする
+      };
+    });
     // 画面キーボードの寸法（端末ごと。同期しない）。変えたら試し打ちだけ作り直す
     const kbRefresh = () => {
       const pv = document.getElementById('kb-preview');

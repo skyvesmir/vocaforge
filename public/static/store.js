@@ -237,6 +237,18 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  // 復習の「期限」は日単位で判定する（その日の終わりまでに期日が来るカードは、その日の復習対象）。
+  // 保存している due（ミリ秒）は変えない。判定のときだけ、ローカル日付の翌日0時を上限にする。
+  //   対象: card.due < dueLimit(now)   ※ 「期日の日付 <= 今日」と同じ意味
+  // 理由: 保存 due は「復習した時刻 + 間隔日」なので、前日の夜に解いたカードは翌日の朝にはまだ未到来になり、
+  //   復習が1日ずれて遅れる。日単位にそろえると、期限超過が減り、想起確率も上がる（シミュレーション：
+  //   超過 0.24→0.00 日 / 0.47→0.12 日 / 0.56→0.22 日、想起確率 +1〜2pt、復習は 1日あたり +2〜3%）。
+  // 1分後に再出題する「もう一度」(due = now + 60秒) は、どの判定でも当日中に期限が来るので結果は変わらない。
+  function dueLimit(now) {
+    const d = new Date(now || Date.now());
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+  }
+
   // ---- マージ規則（クラウド同期と手動インポートの共通実装）----
   // 「同じユーザーの2つのスナップショット」を突き合わせる前提の規則。
   // cards / logs / daily / seen / reviewCount の決め方はここ1箇所にしか書かない。
@@ -674,6 +686,7 @@
     },
 
     todayStr,
+    dueLimit,
 
     // ---- ローカル最終更新時刻（自動同期の新旧判定用）----
     getUpdatedAt() { return load(K.updatedAt, 0) || 0; },

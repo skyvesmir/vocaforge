@@ -444,3 +444,74 @@ html[data-runes] body {
 }
 /* 入力欄・ボタン・選択欄は、ブラウザの既定で font-family と text-transform を継承しない */
 html[data-runes] :is(input, button, select, textarea) { font-family: inherit; text-transform: var(--vf-rune-case); }
+
+/* ---------- カロ（案内役・お願い画面）----------
+   アイコンは画面の隅（ナビの上・右下）に固定。吹き出しは、アイコンの上に開く。
+   色は端末のテーマに合わせる（ダークは濃い紺、ライトは白）。 */
+.vf-karo, .vf-karo-bubble-static {
+  --karo-bubble-bg: #1e293b;
+  --karo-bubble-border: rgba(148, 163, 184, 0.28);
+  --karo-bubble-text: #e2e8f0;
+  --karo-name: #a5b4fc;
+}
+html.light .vf-karo, html.light .vf-karo-bubble-static {
+  --karo-bubble-bg: #ffffff;
+  --karo-bubble-border: rgba(15, 23, 42, 0.14);
+  --karo-bubble-text: #1e293b;
+  --karo-name: #4f46e5;
+}
+.vf-karo-corner {
+  position: fixed;
+  right: max(12px, calc((100vw - 36rem) / 2 + 12px));
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  z-index: 35;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+  pointer-events: none;
+}
+.vf-karo-corner > * { pointer-events: auto; }
+.vf-karo-btn {
+  flex: none; width: 52px; height: 52px; padding: 0; overflow: hidden;
+  border-radius: 9999px; cursor: pointer;
+  background: rgba(99, 102, 241, 0.28);
+  border: 2px solid var(--karo-bubble-border);
+  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.35);
+  transition: transform 0.15s ease;
+}
+.vf-karo-btn:active { transform: scale(0.94); }
+.vf-karo-btn img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.vf-karo-bubble {
+  position: relative;
+  width: min(290px, calc(100vw - 24px));
+  padding: 10px 34px 12px 14px;
+  border-radius: 16px; text-align: left;
+  background: var(--karo-bubble-bg); color: var(--karo-bubble-text);
+  border: 1px solid var(--karo-bubble-border);
+  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.35);
+}
+.vf-karo-bubble[hidden] { display: none; }
+.vf-karo-name { font-size: 11px; font-weight: 800; color: var(--karo-name); margin-bottom: 2px; }
+.vf-karo-text { font-size: 13px; line-height: 1.65; }
+.vf-karo-close {
+  position: absolute; top: 4px; right: 4px; width: 28px; height: 28px;
+  border: 0; background: transparent; color: inherit; opacity: 0.55; cursor: pointer; font-size: 13px;
+}
+/* しっぽ: 隅に固定のときはアイコン側（右下）、インラインのときは左（アイコン側） */
+.vf-karo-corner .vf-karo-bubble::after {
+  content: ''; position: absolute; right: 18px; bottom: -7px; width: 12px; height: 12px;
+  background: var(--karo-bubble-bg); border-right: 1px solid var(--karo-bubble-border); border-bottom: 1px solid var(--karo-bubble-border);
+  transform: rotate(45deg);
+}
+.vf-karo-inline { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: flex-start; gap: 10px; margin-top: 12px; }
+.vf-karo-inline .vf-karo-bubble { flex: 1 1 auto; width: auto; min-width: 0; }
+.vf-karo-inline .vf-karo-bubble::before {
+  content: ''; position: absolute; left: -7px; top: 18px; width: 12px; height: 12px;
+  background: var(--karo-bubble-bg); border-left: 1px solid var(--karo-bubble-border); border-bottom: 1px solid var(--karo-bubble-border);
+  transform: rotate(45deg);
+}
+/* お願い画面の大きな吹き出し（しっぽは上向き、カロを指す） */
+.vf-karo-bubble-static { width: auto; padding: 10px 22px 12px; margin-top: 10px; text-align: center; }
+.vf-karo-bubble-static::before {
+  content: ''; position: absolute; left: 50%; top: -7px; width: 12px; height: 12px; margin-left: -6px;
+  background: var(--karo-bubble-bg); border-left: 1px solid var(--karo-bubble-border); border-top: 1px solid var(--karo-bubble-border);
+  transform: rotate(45deg);
+}

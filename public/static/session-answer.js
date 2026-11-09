@@ -11,6 +11,8 @@
   const ns = (window.__VFSession = window.__VFSession || {});
   // 遅延解決ブリッジ: nextCard は session.js（後読み込み）で定義される
   function nextCard() { return ns.nextCard.apply(null, arguments); }
+  // 弱点ドリルで「もう一度」にしたカードを、何枚あとに再出題するか
+  const DRILL_AGAIN_GAP = 3;
 
   function applyGrade(card, q, grade, correct) {
     const s = VF.STATE.session;
@@ -136,7 +138,14 @@
     s.answered++;
     if (correct) s.correct++;
     // Again は当日中に再出題。再出題時は必ず記入式で出すためマークする
-    if (grade === 1) { s.reAdd.push(card); s.againIds[card.id] = true; }
+    if (grade === 1) {
+      // 弱点ドリルは15枚と短く、末尾に回すと、最後の1枚を「もう一度」にしたときに同じ語がそのまま続く
+      // （T3 調査: 1ドリルあたり約2割）。ドリルだけ、数枚あとの位置に差し込む。
+      // 差し込み先が末尾になる（残りが0枚）ときは、他に出せるカードがないので、そのまま続く。
+      if (s.deck === 'weak') s.queue.splice(Math.min(s.queue.length, s.idx + 1 + DRILL_AGAIN_GAP), 0, card);
+      else s.reAdd.push(card);
+      s.againIds[card.id] = true;
+    }
     // 記入式で正解できたら Again マークを解除（定着とみなす）
     else if (s.againIds[card.id] && (q.format === 'type-je' || q.format === 'cloze') && correct) { delete s.againIds[card.id]; }
 

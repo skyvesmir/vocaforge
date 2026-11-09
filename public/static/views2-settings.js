@@ -107,6 +107,17 @@
           : '') +
       '</div>';
 
+    // ---- カロのヒント（画面の隅の案内役。端末ごとに保存。クラウドには同期しない）----
+    const karoOn = window.VFKaro ? window.VFKaro.enabled() : true;
+    const karoHtml = window.VFKaro
+      ? '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4">' +
+          '<label class="flex items-center justify-between py-3 cursor-pointer">' +
+            '<span><span class="text-sm font-medium">カロのヒント</span>' +
+            '<span class="block text-xs text-slate-400 mt-0.5">画面の隅にカロが出て、タップするとその画面の使い方を教えてくれます。はじめて見る画面では、最初の1回だけ自動で開きます。この端末だけの設定です</span></span>' +
+            '<input type="checkbox" data-karo-toggle ' + (karoOn ? 'checked' : '') + ' class="w-11 h-6 appearance-none rounded-full bg-slate-700 checked:bg-brand relative transition cursor-pointer toggle"></label>' +
+        '</div>'
+      : '';
+
     // ---- 画面キーボードの寸法（端末ごとに保存。クラウドには同期しない）----
     let kbHtml = '';
     if (s.onScreenKeyboard !== false && window.__kbPrefs) {
@@ -145,6 +156,7 @@
       '<h2 class="text-sm font-bold text-slate-300 mb-2">外観</h2>' +
       themeHtml +
       runesHtml +
+      karoHtml +
 
       '<h2 class="text-sm font-bold text-slate-300 mb-2">単語データベース</h2>' +
       (function () {
@@ -259,6 +271,7 @@
         '<i class="fas fa-trash mr-2"></i>学習データをすべてリセット</button>' +
 
       '<div class="text-xs text-slate-500 text-center leading-relaxed">VocaForge ・ 英単語1900 / 英熟語1000 / 語源590<br>FSRS-7（個人最適化対応）× 能動的想起 × 分散学習</div>' +
+      (window.VFKaro ? window.VFKaro.html('settings') : '') +
       VF.nav('settings') + '</div>';
   };
 })();
