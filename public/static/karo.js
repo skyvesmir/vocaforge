@@ -40,7 +40,7 @@
     grading: '答えを見たら、手応えを選びます。すぐ分かったら「できた」、時間がかかったら「難しい」、思い出せなかったら「もう一度」。正直に選ぶほど、次に出す日がうまく決まります。',
     gradingDrill: 'いまは練習中です。ここでの正解は、復習の予定を変えません。あとで普通の復習のときに、時間を空けてもう一度確かめます。',
     stats: 'ここは記憶の記録です。「リーチ」は、何度も忘れてしまうカードのこと。くり返し練習すると、少しずつ定着します。「定着」は、記憶が長く持つようになったカードです。',
-    settings: '1日の新規の数や、復習の上限、見た目を変えられます。迷ったら、そのままで大丈夫です。わたしの出番を減らしたいときは、「カロのヒント」をオフにしてください。'
+    settings: '1日の新規の数や、復習の上限、見た目を変えられます。迷ったら、そのままで大丈夫です。この吹き出しを出したくないときは、「ヒント」をオフにしてください。'
   };
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -55,6 +55,11 @@
   }
   function markSeen(id) { const m = seenMap(); m[id] = 1; lsSet(KEY_SEEN, JSON.stringify(m)); }
 
+  // 案内役の名前。成長カロが最終段階に届くまでは伏せる（案内役の絵が最終段階の姿なので、名前で正体が分からないように）
+  function guideName() {
+    return (parseInt(lsGet(KEY_STAGE) || '0', 10) || 0) >= STAGES.length ? 'カロ' : '？？？';
+  }
+
   const esc = s => (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   // 案内役のHTML。opts.inline=true のときは、画面の流れの中に1行で置く（採点画面用）。
@@ -65,10 +70,10 @@
     return '<div class="vf-karo ' + (inline ? 'vf-karo-inline' : 'vf-karo-corner') + '" data-karo="' + id + '">' +
       '<div class="vf-karo-bubble" role="status" hidden>' +
         '<button type="button" class="vf-karo-close" aria-label="閉じる"><i class="fas fa-xmark"></i></button>' +
-        '<div class="vf-karo-name">カロ</div>' +
+        '<div class="vf-karo-name">' + guideName() + '</div>' +
         '<div class="vf-karo-text">' + esc(HINTS[id]) + '</div>' +
       '</div>' +
-      '<button type="button" class="vf-karo-btn" aria-label="カロのヒント" aria-expanded="false">' +
+      '<button type="button" class="vf-karo-btn" aria-label="ヒント" aria-expanded="false">' +
         '<img src="' + IMG_ICON + '" alt="" width="52" height="52" draggable="false"></button>' +
     '</div>';
   }
@@ -211,7 +216,7 @@
         // 画像は胸から上で切ってあるので、下の端をぼかして、切れ目が見えないようにする
         'style="-webkit-mask-image:linear-gradient(#000 78%,transparent);mask-image:linear-gradient(#000 78%,transparent)">' +
       '<div class="vf-karo-bubble vf-karo-bubble-static mt-1" role="status">' +
-        '<div class="vf-karo-name">カロ</div>' +
+        '<div class="vf-karo-name">' + guideName() + '</div>' +
         '<div class="text-lg font-extrabold">協力お願いします！</div>' +
       '</div>' +
       '<p class="text-sm text-slate-400 leading-relaxed mt-5">不便なところや、追加してほしい単語・熟語があれば、教えてください。いただいた意見は、今後の改良の参考にします。</p>' +
