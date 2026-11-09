@@ -9,7 +9,12 @@
  *
  * お願い画面（renderFeedback）: テスター版のホームのカードから開く。Google フォームへのボタンを出す。
  *
- * 画像: /static/karo/karo-icon.webp（案内役の顔）, karo-ask.webp（お願いのポーズ）
+ * 成長するカロ（growthHtml）: ホームのカード。学習済みの語数で姿が5段階に変わる。段階が上がったときは、
+ *   ホームを開いたときに1回だけ祝いの画面を出し、最終段階では正体を明かす。
+ *   進んだ段階は端末ごとの localStorage（vf-karo-stage）に覚える。学習データではないので同期しない。
+ *
+ * 画像: /static/karo/karo-icon.webp（案内役の顔）, karo-ask.webp（お願いのポーズ）, stage1〜5.webp（成長）
+ *   成長の絵は白地のまま使い、紙色の面に mix-blend-mode: multiply で重ねて白を溶かす（透過の切り抜きをしない）。
  */
 (function () {
   'use strict';
@@ -17,6 +22,17 @@
   const KEY_SEEN = 'vf-karo-seen';   // { ヒントID: 1 }
   const IMG_ICON = '/static/karo/karo-icon.webp';
   const IMG_ASK = '/static/karo/karo-ask.webp';
+  const KEY_STAGE = 'vf-karo-stage'; // 到達した成長段階（祝いを1回だけ出すため）
+
+  // 成長の段階。at = その段階になる「学習済み語数」。
+  const STAGES = [
+    { n: 1, at: 0,    name: '眠る相譜',     line: 'まだ眠っています。語を覚えるたびに、輪郭へ熱が通っていきます。' },
+    { n: 2, at: 150,  name: '目ざめの輪郭', line: '輪郭が目ざめました。もう少しで、色がつきます。' },
+    { n: 3, at: 600,  name: '色づく子狐',   line: '色がつきました。あなたが覚えた語の分だけ、この子は温かくなります。' },
+    { n: 4, at: 1500, name: '立ち上がる獣', line: '二本の足で立てるようになりました。もうすぐ、姿が定まります。' },
+    { n: 5, at: 2800, name: 'カロ',         line: '……ずっと案内していたのは、わたしでした。あなたが覚えた分だけ、姿が定まったの。ここから先も、いっしょに。' }
+  ];
+  const stageImg = n => '/static/karo/stage' + n + '.webp';
 
   // 画面ごとの一言。言葉づかいは、読相の見習いとしてのカロ（やさしく短く）。
   const HINTS = {
@@ -67,6 +83,7 @@
 
   // root 配下の案内役を動かす。描画のたびに呼ぶ（要素は毎回作り直されるので二重バインドにならない）。
   function bind(root) {
+    bindGrowth(root);
     (root || document).querySelectorAll('.vf-karo[data-karo]').forEach(el => {
       if (el._karoBound) return;
       el._karoBound = true;
@@ -88,6 +105,97 @@
       if (b && !b.hidden && !el.contains(e.target)) setOpen(el, false);
     });
   });
+
+  // ====== 成長するカロ ======
+  function stageOf(learned) {
+    let n = 1;
+    for (const st of STAGES) if (learned >= st.at) n = st.n;
+    return n;
+  }
+  // 現在の段階・次の段階までの進み具合
+  function growthInfo(learned) {
+    learned = Math.max(0, Math.floor(Number(learned) || 0));
+    const n = stageOf(learned);
+    const cur = STAGES[n - 1], next = STAGES[n] || null;
+    return {
+      learned, n, cur, next,
+      remain: next ? next.at - learned : 0,
+      ratio: next ? Math.min(1, (learned - cur.at) / (next.at - cur.at)) : 1
+    };
+  }
+
+  // ホームのカード。タップで詳しい画面（モーダル）を開く
+  function growthHtml(learned) {
+    const g = growthInfo(learned);
+    return '<button type="button" data-karo-grow data-learned="' + g.learned + '" ' +
+      'class="w-full text-left bg-slate-900 rounded-2xl p-3 mb-5 border border-slate-800 flex items-center gap-3 active:scale-[0.99] transition">' +
+        '<span class="vf-karo-paper w-16 h-16 shrink-0"><img src="' + stageImg(g.n) + '" alt="" loading="lazy" draggable="false"></span>' +
+        '<span class="min-w-0 flex-1">' +
+          '<span class="flex items-baseline gap-2"><span class="font-bold text-sm">カロ</span>' +
+          '<span class="text-[11px] text-slate-400">段階 ' + g.n + '/5 ・ ' + esc(g.cur.name) + '</span></span>' +
+          '<span class="block mt-1.5 h-1.5 bg-slate-800 rounded-full overflow-hidden"><span class="block h-full bg-brand" style="width:' + Math.round(g.ratio * 100) + '%"></span></span>' +
+          '<span class="block text-[11px] text-slate-400 mt-1">' +
+            (g.next ? '次の段階まで あと ' + g.remain + '語' : '最終段階です') + '</span>' +
+        '</span>' +
+        '<i class="fas fa-chevron-right text-slate-500 text-xs"></i></button>';
+  }
+
+  // 段階の一覧（到達した段階は絵、まだの段階は鍵と必要な語数。先の絵は見せない）
+  function stepsHtml(g) {
+    return '<div class="flex justify-between gap-1.5 mt-4">' + STAGES.map(st => {
+      const reached = st.n <= g.n;
+      return '<div class="flex-1 text-center">' +
+        (reached
+          ? '<span class="vf-karo-paper w-full h-12 ' + (st.n === g.n ? 'vf-karo-paper-now' : '') + '"><img src="' + stageImg(st.n) + '" alt="段階' + st.n + '" loading="lazy" draggable="false"></span>'
+          : '<span class="vf-karo-paper vf-karo-paper-lock w-full h-12"><i class="fas fa-lock text-[11px]"></i></span>') +
+        '<div class="text-[10px] mt-1 ' + (reached ? 'text-slate-300' : 'text-slate-500') + '">' + st.at + '語</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function closeGrowth() { const m = document.getElementById('vf-karo-modal'); if (m) m.remove(); }
+
+  // up=true のときは「成長しました！」の見出しにする
+  function openGrowth(learned, up) {
+    closeGrowth();
+    const g = growthInfo(learned);
+    const title = up ? 'カロが成長しました！' : 'カロの成長';
+    const html =
+      '<div id="vf-karo-modal" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">' +
+        '<div class="bg-slate-900 w-full max-w-xl rounded-t-3xl sm:rounded-3xl border border-slate-800 p-5 max-h-[92vh] overflow-y-auto">' +
+          '<div class="flex items-center justify-between mb-3">' +
+            '<div class="text-lg font-extrabold">' + title + '</div>' +
+            '<button type="button" data-karo-modal-close class="text-slate-400 p-1" aria-label="閉じる"><i class="fas fa-xmark text-xl"></i></button></div>' +
+          '<div class="vf-karo-paper mx-auto" style="width:min(80%,300px);height:min(52vh,340px)"><img src="' + stageImg(g.n) + '" alt="' + esc(g.cur.name) + '" draggable="false"></div>' +
+          '<div class="text-center mt-3"><span class="text-xs text-slate-400">段階 ' + g.n + '/5</span>' +
+            '<div class="font-bold">' + esc(g.cur.name) + '</div></div>' +
+          '<div class="vf-karo-bubble vf-karo-bubble-static mt-3" style="width:auto">' +
+            '<div class="vf-karo-name">カロ</div><div class="vf-karo-text" style="text-align:left">' + esc(g.cur.line) + '</div></div>' +
+          '<div class="mt-4 text-xs text-slate-400 text-center">学習済み ' + g.learned + '語' +
+            (g.next ? ' ・ 次の段階まで あと ' + g.remain + '語' : ' ・ 最終段階') + '</div>' +
+          '<div class="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-brand" style="width:' + Math.round(g.ratio * 100) + '%"></div></div>' +
+          stepsHtml(g) +
+        '</div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+    const m = document.getElementById('vf-karo-modal');
+    m.onclick = e => { if (e.target === m || e.target.closest('[data-karo-modal-close]')) closeGrowth(); };
+  }
+
+  // 段階が上がっていれば、その段階を返す（初めて見る端末では、記録するだけで祝わない）
+  function checkStageUp(learned) {
+    const cur = stageOf(learned);
+    const prev = parseInt(lsGet(KEY_STAGE) || '0', 10) || 0;
+    if (cur !== prev) lsSet(KEY_STAGE, String(cur));
+    return (prev && cur > prev) ? cur : 0;
+  }
+
+  function bindGrowth(root) {
+    const el = (root || document).querySelector('[data-karo-grow]');
+    if (!el || el._karoBound) return;
+    el._karoBound = true;
+    const learned = parseInt(el.getAttribute('data-learned'), 10) || 0;
+    el.onclick = () => openGrowth(learned, false);
+    if (checkStageUp(learned)) openGrowth(learned, true);
+  }
 
   // ====== お願い画面（テスター版） ======
   function feedbackUrl() {
@@ -114,5 +222,5 @@
       VF.nav('home') + '</div>';
   };
 
-  window.VFKaro = { html, bind, enabled, setEnabled, hints: HINTS };
+  window.VFKaro = { html, bind, enabled, setEnabled, hints: HINTS, growthHtml, growthInfo, stageOf, STAGES };
 })();

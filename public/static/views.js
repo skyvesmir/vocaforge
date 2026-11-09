@@ -89,6 +89,9 @@
         miniStat('保持率', st.retention == null ? '—' : st.retention + '%', 'fa-bullseye') +
       '</div>' +
 
+      // 成長するカロ（学習済みの語数で姿が変わる。karo.js）
+      (window.VFKaro ? window.VFKaro.growthHtml(st.learned) : '') +
+
       // 弱点集中モード（リーチ語のドリル）
       (function () {
         const n = window.__weakCount ? window.__weakCount() : 0;
