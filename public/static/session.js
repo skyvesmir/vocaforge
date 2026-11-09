@@ -37,8 +37,8 @@
       app.innerHTML =
         '<div class="max-w-xl mx-auto min-h-screen flex flex-col items-center justify-center px-6 text-center">' +
         '<i class="fas fa-medal text-5xl text-amber-400 mb-4"></i>' +
-        '<h1 class="text-xl font-extrabold mb-1">弱点なし！</h1>' +
-        '<p class="text-slate-400 text-sm mb-6">いまのところ苦手なカードはありません。この調子！</p>' +
+        '<h1 class="text-xl font-extrabold mb-1">今は集中練習の対象はありません</h1>' +
+        '<p class="text-slate-400 text-sm mb-6">くり返し練習するカードは、いまのところありません。</p>' +
         '<button id="back-btn" class="bg-brand text-white font-bold rounded-xl py-3 px-8">戻る</button></div>';
       bindBack();
       return;
@@ -519,12 +519,18 @@
     // 自己評価ボタン（FSRS Grade 1-4）。プレビュー間隔を表示
     const st = Store.getCard(card.id);
     const pv = FSRS.preview(st, s.settings.requestRetention);
+    // 弱点ドリルの解答は FSRS の復習予定を変えない（session-answer.js 参照）。
+    // 「次回の復習間隔が変わります」と間隔のプレビューを出すと、実際の動作と食い違うので、ドリルでは出さない。
+    const isDrill = s.deck === 'weak';
     const gradeBtn = (g, label, color) =>
       '<button data-grade="' + g + '" class="flex-1 ' + color + ' rounded-xl py-3 font-bold text-sm active:scale-95 transition">' +
-      label + '<span class="block text-[10px] font-normal opacity-80 mt-0.5">' + fmtIvl(pv[g]) + '</span></button>';
+      label + (isDrill ? '' : '<span class="block text-[10px] font-normal opacity-80 mt-0.5">' + fmtIvl(pv[g]) + '</span>') + '</button>';
 
+    const gradeNote = isDrill
+      ? '手応えは？<span class="block text-[10px] text-slate-500 mt-0.5">ここでの正解は復習予定を変えません。次の通常復習で、時間を空けて確かめます。</span>'
+      : '手応えは？（次回の復習間隔が変わります）';
     const grading =
-      '<div class="mt-5"><div class="text-xs text-slate-400 text-center mb-2">手応えは？（次回の復習間隔が変わります）</div>' +
+      '<div class="mt-5"><div class="text-xs text-slate-400 text-center mb-2">' + gradeNote + '</div>' +
       '<div class="flex gap-2">' +
         gradeBtn(1, 'もう一度', 'bg-rose-500/20 text-rose-200') +
         gradeBtn(2, '難しい', 'bg-amber-500/20 text-amber-200') +
@@ -532,16 +538,21 @@
         gradeBtn(4, '簡単', 'bg-sky-500/20 text-sky-200') +
       '</div></div>';
 
+    // カロの案内（採点画面）。ドリルのときは、復習予定が変わらない旨の文にする。
+    // 画面キーボードの採点パネルは高さが固定なので、案内は答えの側（#feedback）に置く。
+    const karoRow = window.VFKaro ? window.VFKaro.html(isDrill ? 'gradingDrill' : 'grading', { inline: true }) : '';
+
     if ($('#vf-kb')) {
       // 画面キーボード使用中: 採点ボタンはキーボードの場所に出す。
       // 正誤・答えは入力欄の下に出し、スクロールは「隠れるときだけ」瞬時に行う。
-      $('#feedback').innerHTML = answerBlock;
+      $('#feedback').innerHTML = answerBlock + karoRow;
       swapKeyboardForGrading(grading);
       ensureAboveKeyboard($('#feedback'));
     } else {
-      $('#feedback').innerHTML = answerBlock + grading;
+      $('#feedback').innerHTML = answerBlock + karoRow + grading;
       $('#feedback').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+    if (window.VFKaro) window.VFKaro.bind($('#feedback'));
     if (window.__bindEtymChips) window.__bindEtymChips($('#feedback'));
 
     // デフォルト推奨をハイライト

@@ -39,6 +39,7 @@
     else if (STATE.route === 'stats') app.innerHTML = renderStats();
     else if (STATE.route === 'browse') app.innerHTML = renderBrowse(STATE.opts.deck);
     else if (STATE.route === 'settings') app.innerHTML = renderSettings();
+    else if (STATE.route === 'feedback') app.innerHTML = window.renderFeedback ? window.renderFeedback() : renderHome();
     bindGlobal();
     window.scrollTo(0, 0);
   }
@@ -117,6 +118,8 @@
 
     // 設定操作
     bindSettings();
+    // カロ（案内役）。最初に見た画面だけ自動で開く
+    if (window.VFKaro) window.VFKaro.bind(app);
   }
 
   function showDetail(id, deck) {

@@ -80,10 +80,10 @@
         '難' + w.diff.toFixed(1) + '<span class="text-[9px] text-slate-500 font-normal"> / ' + label + '</span></div>';
     });
     const fsrsSection = weakBox(
-      '弱点単語一覧（FSRS状態）',
+      '定着の途中・推定難易度が高いカード',
       '（リーチ・高難易度・記憶が浅い順・上位30）',
       fsrsRows,
-      'FSRS状態で見た弱点カードはありません。記憶がよく定着しています！');
+      '今は該当するカードはありません。');
 
     // --- リスト2: ミス回数による弱点（間違えた回数が多い順）---
     const missWeak = learned.filter(w => w.lapses >= 1);
@@ -91,12 +91,12 @@
     const missTop = missWeak.slice(0, 30);
     const missRows = weakRowsHtml(missTop, w =>
       '<div class="text-xs font-bold text-rose-300">' + w.lapses +
-        '<span class="text-[9px] text-slate-500 font-normal">回ミス</span></div>');
+        '<span class="text-[9px] text-slate-500 font-normal">回</span></div>');
     const missSection = weakBox(
-      '弱点単語一覧（ミス回数）',
-      '（間違いが多い順・上位30）',
+      'もう一度を押した回数（練習を含む）',
+      '（回数が多い順・上位30）',
       missRows,
-      'まだ間違えたカードはありません。この調子！');
+      'まだ「もう一度」を押した記録はありません。');
 
     // 弱点集中モードの起動ボタン（弱点があるときだけ表示）
     const weakDrillBtn = (window.__weakCount && window.__weakCount() > 0)
@@ -104,7 +104,11 @@
           '<i class="fas fa-dumbbell mr-2"></i>弱点集中モードでドリルする（' + window.__weakCount() + '語）</button>'
       : '';
 
-    const weakSection = weakDrillBtn + fsrsSection + missSection;
+    // 一覧の前に1行の説明。「弱点」は能力の固定評価ではなく、記憶モデルの目安と練習記録であることを示す。
+    const weakIntro = '<div class="text-[11px] text-slate-500 leading-relaxed mb-3">' +
+      '記憶モデルの目安です。練習の対象とは異なります。' +
+      '「もう一度」の回数は、弱点ドリルでの回答も含みます。</div>';
+    const weakSection = weakDrillBtn + weakIntro + fsrsSection + missSection;
 
     // 直近14日バー
     const days = [];
@@ -153,8 +157,8 @@
       '</div>' +
 
       (st.nLeech > 0 ? '<div class="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 mb-4 text-sm">' +
-        '<i class="fas fa-triangle-exclamation text-rose-400 mr-2"></i>苦手カード（リーチ）が <b>' + st.nLeech + '</b> 件。' +
-        '何度も間違えるカードです。意味を分割・言い換えると覚えやすくなります。</div>' : '') +
+        '<i class="fas fa-triangle-exclamation text-rose-400 mr-2"></i>くり返し練習するカード（リーチ）が <b>' + st.nLeech + '</b> 件。' +
+        '定着しにくいカードです。意味を分割・言い換えると覚えやすくなります。</div>' : '') +
 
       weakSection +
 
@@ -162,6 +166,7 @@
         '<i class="fas fa-circle-info mr-1"></i>本アプリは <b>FSRS-7</b> による分散学習と能動的想起を採用。' +
         'スラスラ解ける＝学べている、ではありません。忘れかけた頃の復習が最も記憶を強化します。</div>' +
 
+      (window.VFKaro ? window.VFKaro.html('stats') : '') +
       VF.nav('stats') + '</div>';
   };
 })();

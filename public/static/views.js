@@ -8,13 +8,13 @@
   // ====== ホーム ======
   function dueCounts(deck, group) {
     const cards = VF.deckCards(deck, group);
-    const now = Date.now();
+    const dueBefore = Store.dueLimit(Date.now());   // 期限は日単位で判定（store.js dueLimit 参照）
     const states = Store.getAllCards();
     let due = 0, fresh = 0;
     cards.forEach(c => {
       const s = states[c.id];
       if (!s || s.state === 'new') fresh++;
-      else if (s.due <= now) due++;
+      else if (s.due < dueBefore) due++;
     });
     return { total: cards.length, due, fresh };
   }
@@ -89,6 +89,9 @@
         miniStat('保持率', st.retention == null ? '—' : st.retention + '%', 'fa-bullseye') +
       '</div>' +
 
+      // 成長するカロ（学習済みの語数で姿が変わる。karo.js）
+      (window.VFKaro ? window.VFKaro.growthHtml(st.learned) : '') +
+
       // 弱点集中モード（リーチ語のドリル）
       (function () {
         const n = window.__weakCount ? window.__weakCount() : 0;
@@ -117,16 +120,18 @@
       (function () {
         const url = window.VF_CONFIG && window.VF_CONFIG.FEEDBACK_URL;
         if (!url || !/^https:\/\/docs\.google\.com\/forms\//.test(url)) return '';
-        return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" class="block mt-5 bg-slate-900 hover:bg-slate-800 transition rounded-2xl p-4 border border-slate-800">' +
+        // 押すと、カロが「協力お願いします！」と言うお願い画面（karo.js の renderFeedback）へ。フォームへはそこから開く
+        return '<button data-go="feedback" class="block w-full text-left mt-5 bg-slate-900 hover:bg-slate-800 transition rounded-2xl p-4 border border-slate-800">' +
           '<div class="flex items-center justify-between">' +
             '<div class="flex items-center gap-3">' +
               '<span class="w-10 h-10 rounded-xl bg-brand/20 text-brand flex items-center justify-center"><i class="fas fa-envelope text-lg"></i></span>' +
               '<div><div class="font-bold">開発者へメッセージ</div>' +
               '<div class="text-xs text-slate-400 mt-0.5">不便な点・追加してほしい単語や熟語を送る</div></div>' +
             '</div>' +
-            '<i class="fas fa-arrow-up-right-from-square text-slate-500"></i>' +
-          '</div></a>';
+            '<i class="fas fa-chevron-right text-slate-500"></i>' +
+          '</div></button>';
       })() +
+      (window.VFKaro ? window.VFKaro.html('home') : '') +
       VF.nav('home') + '</div>';
   };
 
@@ -224,13 +229,13 @@
 
   function sectionDue(deck, group) {
     const cards = VF.deckCards(deck, group);
-    const now = Date.now();
+    const dueBefore = Store.dueLimit(Date.now());   // 期限は日単位で判定（store.js dueLimit 参照）
     const states = Store.getAllCards();
     let due = 0, fresh = 0;
     cards.forEach(c => {
       const s = states[c.id];
       if (!s || s.state === 'new') fresh++;
-      else if (s.due <= now) due++;
+      else if (s.due < dueBefore) due++;
     });
     return { due, fresh };
   }
@@ -242,7 +247,7 @@
   // カード取得・状態パースとも描画毎に1回で済む。
   function allSectionDue(deck) {
     const cards = VF.deckCards(deck); // group未指定 = 全カード（group属性付き）
-    const now = Date.now();
+    const dueBefore = Store.dueLimit(Date.now());   // 期限は日単位で判定
     const states = Store.getAllCards();
     const map = {};
     cards.forEach(c => {
@@ -250,7 +255,7 @@
       const m = map[k] || (map[k] = { due: 0, fresh: 0 });
       const s = states[c.id];
       if (!s || s.state === 'new') m.fresh++;
-      else if (s.due <= now) m.due++;
+      else if (s.due < dueBefore) m.due++;
     });
     return map;
   }
