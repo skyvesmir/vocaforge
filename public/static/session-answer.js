@@ -76,6 +76,8 @@
         // 入力または選択した答えが合っていたか（客観的な判定）。grade は自己評価で上書きできるので、別に残す。
         // 上のサーバー送信分（payload.log.correct）と同じ名前・同じ値。別の端末から引いたログも、この名前で入る
         correct: !!correct,
+        // 記入の判定（ok / close(おしい) / confused(混同) / wrong）。選択式は入らない。ローカルのログだけに残す
+        judge: q.judge || null,
         duration_ms: now - s.current.shownAt,
         s_before: before.stability || 0, d_before: before.difficulty || 0,
         s_after: res.stability, d_after: res.difficulty
