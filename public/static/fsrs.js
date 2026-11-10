@@ -267,16 +267,28 @@
   // minReps=5 は、1〜2回のつまずきだけでリーチと判定しないための下限。
   // ただし reps は、同じ日の「もう一度」の再出題も1回として数える（applyGrade は全解答で reps+1）。
   // そのため、新規カードを初日に何度もやり直すと、その日のうちに minReps を超え、S も小さいので
-  // 初日のうちにリーチと判定されうる。この「初日リーチ」の扱いは未決定で、現状は変えていない。
+  // 初日のうちにリーチと判定されてしまう。初日のやり直しは「覚え込みの途中」であって「忘れた」ではないので、
+  // 初日は除外する: 最後の復習の日が、最初に解いた日（card.first_day）より後であること。
+  //   first_day は初めて解いた日（'YYYY-MM-DD'、端末のローカル日付）。ドリルは last_review を動かさないので、
+  //   ドリルだけで「別の日」にはならない（通常の復習が1回入ってから判定される）。
+  //   first_day が無い既存のカードは、これまでどおり reps / S だけで判定する（データを書き換えない）。
+  //   first_day はサーバーに列が無く、同期では手元の値を引き継ぐ。無い端末では従来の判定に戻るだけで、害はない。
   // maxStability=1 は「想起確率90%を保てるのが1日未満」の意味。
   // 値を変えるときは、fsrs.js をそのまま Node で実行して、Again/Good 交互・Again連続・
   // Hard連打・新規の同日やり直しなどのカードで (reps, S) の推移を確認すること。
   const LEECH = { minReps: 5, maxStability: 1 };
+  // 端末のローカル日付 'YYYY-MM-DD'（Store.todayStr と同じ形）
+  function dayStr(ms) {
+    const d = new Date(ms);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
   function isLeech(card) {
     if (!card || card.state === 'new' || card.state == null) return false;
     const reps = Number(card.reps);
     const S = Number(card.stability);
     if (!isFinite(reps) || !isFinite(S)) return false;
+    // 初日は除外（上のコメント参照）。first_day が無ければ従来どおり。
+    if (card.first_day && !(Number(card.last_review) > 0 && dayStr(Number(card.last_review)) > card.first_day)) return false;
     return reps >= LEECH.minReps && S < LEECH.maxStability;
   }
 
@@ -285,7 +297,7 @@
     retrievability: (t, S) => engine.retrievability(t, S),
     intervalFromStability: (S, r) => engine.intervalFromStability(S, r),
     setWeights, getWeights, makeEngine,
-    isLeech, LEECH,
+    isLeech, LEECH, dayStr,
     defaultWeights: DEFAULT_W.slice(),
     // 式を変えたら、この文字列を変える（個人最適化の重みは、版が違うと使わない）
     version: VERSION,
