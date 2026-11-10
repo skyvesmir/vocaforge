@@ -279,11 +279,13 @@
       suspended: !!b.suspended,
       updated_at_ms: cardTouchedAt(b)
     };
-    out.is_leech = FSRS.isLeech(out);
     if (localPrev && typeof localPrev === 'object') {
       if (localPrev.deck !== undefined) out.deck = localPrev.deck;
       if (localPrev.group !== undefined) out.group = localPrev.group;
+      // 初めて解いた日（サーバーに列が無いので手元の値を引き継ぐ。リーチの初日除外に使う）
+      if (localPrev.first_day !== undefined) out.first_day = localPrev.first_day;
     }
+    out.is_leech = FSRS.isLeech(out);   // first_day を引き継いだあとで判定する
     return out;
   }
 

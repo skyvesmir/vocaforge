@@ -45,6 +45,7 @@
         due: before.due, last_review: before.last_review,
         reps, lapses,
         deck: card.deck, group: card.group,
+        first_day: before.first_day,
         // last_review を据え置くので、cardTouchedAt() が「古いカード」と誤判定してしまう
         // （updated_at_ms が無いと last_review で代用する仕様のため）。
         // そのままだと同期のマージで reps/lapses の更新がサーバー側の値に負けて消える。
@@ -55,7 +56,9 @@
         state: res.state, stability: res.stability, difficulty: res.difficulty,
         due: res.due, last_review: res.last_review,
         reps, lapses,
-        deck: card.deck, group: card.group
+        deck: card.deck, group: card.group,
+        // 初めて解いた日（リーチの初日除外に使う）。新規カードの最初の解答で記録し、あとは引き継ぐ
+        first_day: before.first_day || (before.state === 'new' ? FSRS.dayStr(now) : undefined)
       };
     // リーチ判定は更新後の FSRS 状態（reps / stability）から決める。
     newState.is_leech = FSRS.isLeech(newState);
