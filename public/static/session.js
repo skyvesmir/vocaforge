@@ -442,12 +442,13 @@
     const dk = $('#type-dontknow'); if (dk) dk.style.display = 'none';
     // 画面キーボード使用時は、入力用の物理キー受付をここで止める（採点用のキー受付は showGrading が張る）
     dropKeyHandler(VF.STATE.session);
-    // タイプミス（編集距離1）は不正解のまま、「おしい！スペル違い」と表示する。推奨ボタンは Again(1) のまま。
-    // （自動では、タイプミスとスペルの覚え違いを区別できない。Anki でも Hard は「思い出せた」側の評価なので、
-    // 思い出せなかった扱いの入力を Hard に寄せない。つづりの軽いミスだと思う場合は、自分で Hard 以上を選べる）
-    const close = !ok && val && Quiz.editDistance(val, q.answer) <= 1 && Quiz.normalize(val).length > 2;
-    // 混同検出: 不正解かつタイプミスではない場合、DB内の別の語と一致していないか
-    const confused = (!ok && !close && val) ? findConfusedEntry(val, card) : null;
+    // 1文字違い（5文字以上。隣り合う入れ替えも1と数える）は不正解のまま、「おしい」と表示する。推奨ボタンは Again(1) のまま。
+    // （自動では、タイプミスとスペルの覚え違いを区別できない。打ち間違いだと思うときは、自分で「できた」を選ぶ）
+    // 別カードの語と一致するもの（affect と effect など）は、おしいではなく先に「混同」として扱う。
+    const confused = (!ok && val) ? findConfusedEntry(val, card) : null;
+    const close = !ok && !confused && !!val && Quiz.isCloseTypo(val, q);
+    // 後で「おしい」の割合と、そのあと何を押したかを数えるために、判定をログに残す（ローカルのログのみ）
+    q.judge = ok ? 'ok' : (confused ? 'confused' : (close ? 'close' : 'wrong'));
     showGrading(card, q, ok, ok ? 3 : 1, { typed: val, close, confused });
   }
 
@@ -505,7 +506,7 @@
       '<div class="mt-6 rounded-xl border ' + (correct ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-rose-500/40 bg-rose-500/5') + ' p-4">' +
         '<div class="flex items-center gap-2 mb-2 ' + (correct ? 'text-emerald-400' : 'text-rose-400') + '">' +
           '<i class="fas ' + (correct ? 'fa-circle-check' : 'fa-circle-xmark') + '"></i>' +
-          '<span class="font-bold">' + (correct ? '正解！' : (extra.close ? 'おしい！スペル違い' : '不正解')) + '</span></div>' +
+          '<span class="font-bold">' + (correct ? '正解！' : (extra.close ? 'おしい！1文字違い（打ち間違いなら「できた」を自分で押してね）' : '不正解')) + '</span></div>' +
         '<div class="text-lg font-bold">' + esc(card.term) + '</div>' +
         '<div class="text-sm text-slate-300 mt-1">' + br(card.meaning) + '</div>' +
         clozeBlock +

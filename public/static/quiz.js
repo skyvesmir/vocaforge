@@ -322,7 +322,14 @@
     }
 
     // 多肢選択: 誤答3つを同プールから抽出
-    const distractors = shuffle(pool.filter(p => p.id !== card.id));
+    // 同じ品詞を優先する（品詞が違うだけで消去法で当たるのを防ぐ）。主な品詞（「、」区切りの先頭）で比べ、
+    // 品詞のないカード（熟語・語源）や同じ品詞の候補が足りないときは、残りを従来どおりランダムに足す。
+    const mainPos = c => ((c && c.pos) || '').split('、')[0].trim();
+    const shuffledPool = shuffle(pool.filter(p => p.id !== card.id));
+    const wantPos = mainPos(card);
+    const distractors = wantPos
+      ? shuffledPool.filter(p => mainPos(p) === wantPos).concat(shuffledPool.filter(p => mainPos(p) !== wantPos))
+      : shuffledPool;
     const picked = [];
     // 重複除けの初期値: 英→日の選択式では並ぶのは「日本語の意味」なので、正解の意味も入れておく
     // （入れないと、正解と同じ日本語の選択肢が誤答として混ざることがある）。
@@ -386,6 +393,30 @@
     return go(0, 0);
   }
 
+  // 隣り合う2文字の入れ替えを1と数える編集距離（teh → the など指のミス用）
+  function typoDistance(a, b) {
+    const d = [];
+    for (let i = 0; i <= a.length; i++) d[i] = [i];
+    for (let j = 0; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++)
+      for (let j = 1; j <= b.length; j++) {
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    return d[a.length][b.length];
+  }
+
+  // 「おしい」判定: 正規化した入力が5文字以上で、許容形のうち最も近いものとの距離が1以内。
+  // 短い語の1文字違い（cat と cut など）は別の語を思い出しただけのことが多いので対象にしない。
+  // 別カードの語との一致（混同）は呼び出し側で先に調べる。
+  const CLOSE_MIN_LEN = 5;
+  function isCloseTypo(input, q) {
+    const ni = normalize(input);
+    if (ni.length < CLOSE_MIN_LEN) return false;
+    const forms = ((q && q.acceptable) || [q && q.answer]).map(normalize).filter(Boolean);
+    return forms.some(f => typoDistance(ni, f) <= 1);
+  }
+
   // 編集距離（タイプミス許容ヒント用）
   function editDistance(a, b) {
     a = normalize(a); b = normalize(b);
@@ -398,5 +429,5 @@
     return dp[a.length][b.length];
   }
 
-  global.Quiz = { makeQuestion, gradeTyped, shortMeaning, normalize, shuffle, editDistance, acceptableAnswers, makeCloze };
+  global.Quiz = { makeQuestion, gradeTyped, shortMeaning, normalize, shuffle, editDistance, typoDistance, isCloseTypo, acceptableAnswers, makeCloze };
 })(window);
