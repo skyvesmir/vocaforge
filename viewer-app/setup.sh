@@ -176,16 +176,32 @@ step "ビルドの確認"
 DATABASE_URL="${DATABASE_URL:-postgres://u:p@127.0.0.1:5432/x}" npx next build > build.log 2>&1
 if [ $? -eq 0 ]; then say "OK ビルド: next build が通った（ログ: build.log）"; else say "NG ビルド: 失敗。末尾: $(tail -n 5 build.log | tr '\n' ' ')"; fi
 
-# 7. フォント
-step "フォントの確認"
-FC=$(fc-list :lang=ja 2>/dev/null | head -3 | cut -d: -f2 | sort -u | tr '\n' ' ')
-CF=$(node -e 'const {GlobalFonts}=require("@napi-rs/canvas");console.log(GlobalFonts.families.map(f=>f.family).filter(n=>/CJK|JP|Gothic|Mincho|ゴシック|明朝/i.test(n)).slice(0,6).join(", "))' 2>/dev/null)
-say "$([ -n "$CF" ] && echo OK || echo 要確認) 日本語フォント: canvasから見えるもの=[${CF:-なし}] fc-list=[${FC:-なし}]"
+# 7. 日本語フォント（Arena には日本語フォントが無いので、同梱する。Noto Sans JP、OFL）
+step "日本語フォントを用意"
+mkdir -p fonts _fnt && (cd _fnt && npm pack @expo-google-fonts/noto-sans-jp > /dev/null 2>&1 && tar xzf expo-google-fonts-noto-sans-jp-*.tgz 2>/dev/null)
+for w in 400Regular 500Medium 700Bold 900Black; do
+  cp "_fnt/package/$w/NotoSansJP_$w.ttf" fonts/ 2>/dev/null
+done
+cp _fnt/package/LICENSE_FONT fonts/OFL-LICENSE.txt 2>/dev/null
+rm -rf _fnt
+cat > fonts/register.mjs <<'EOF'
+// 使い方: import { GlobalFonts } from '@napi-rs/canvas'; import './fonts/register.mjs';  → ctx.font = '700 48px "Noto Sans JP"'
+import { GlobalFonts } from '@napi-rs/canvas';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+const dir = path.dirname(fileURLToPath(import.meta.url));
+for (const w of ['400Regular', '500Medium', '700Bold', '900Black']) {
+  GlobalFonts.registerFromPath(path.join(dir, `NotoSansJP_${w}.ttf`), 'Noto Sans JP');
+}
+EOF
+CF=$(node -e 'import("./fonts/register.mjs").then(async()=>{const {GlobalFonts,createCanvas}=await import("@napi-rs/canvas");const c=createCanvas(400,80);const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,400,80);x.fillStyle="#000";x.font="700 40px \"Noto Sans JP\"";x.fillText("語源でつながる",10,55);const d=x.getImageData(0,0,400,80).data;let n=0;for(let i=0;i<d.length;i+=4)if(d[i]<128)n++;console.log(GlobalFonts.families.some(f=>f.family==="Noto Sans JP")?"登録済み 描画ピクセル"+n:"登録失敗")})' 2>/dev/null)
+NF=$(ls fonts/*.ttf 2>/dev/null | wc -l)
+say "$([ "$NF" -ge 4 ] && echo "$CF" | grep -q 描画 && echo OK || echo NG) 日本語フォント: fonts/ に Noto Sans JP ${NF}種（400/500/700/900）。fonts/register.mjs を import すると使える（${CF:-確認失敗}）。出典は CREDITS.md に「Noto Sans JP（SIL OFL 1.1）」と書く"
 
 # 8. 掃除と締め
 rm -rf _v 2>/dev/null
 say ""
-say "置いたもの: intro-music/  assets/  sfx/  earshot/  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
+say "置いたもの: intro-music/  assets/  sfx/  earshot/  fonts/  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
 say "※ビューアの画面表示・動画再生は、ここでは確認していない。"
 say "完了（経過 $(el)）"
 touch .setup.done
