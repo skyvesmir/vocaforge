@@ -1,0 +1,2499 @@
+=== APP_CONTRACT.md ===
+# APP_CONTRACT — 動画を作る工程と、ビューアの約束事
+
+ビューアは `out/` に置かれたファイルを「見る・ダウンロードする」だけで、動画は作らない。
+ファイルはアプリの起動後に置かれる前提で、**リクエストのたびに読む**（ビルド時には読まない）。
+
+## 1. 置き場所（環境変数）
+
+| 環境変数 | 既定 | 意味 |
+| :-- | :-- | :-- |
+| `OUT_DIR` | `./out` | 成果物のフォルダ（相対パスは、アプリの作業ディレクトリから） |
+| `NOTES_PATH` | `./NOTES.md` | 制作メモ（Markdown） |
+
+デモ用の見本は `fixtures/out/` と `fixtures/NOTES.md`（固定の場所。`node scripts/make-fixtures.mjs` で作り直せる）。
+
+## 2. `OUT_DIR` に置けるファイル（すべて、無くてよい）
+
+| ファイル | 役割 |
+| :-- | :-- |
+| `vocaforge-intro-1080p.mp4` | 最終版（`versions.json` のキーは `final`） |
+| `draft-540p.mp4` | 通し版（キーは `draft`） |
+| `review-720p.mp4` | 確認用（キーは `review` と仮定） |
+| `poster.png` | プレーヤーの poster |
+| `contact-sheet.jpg` / `spectrogram.png` | 「ファイル」タブにサムネイルで表示 |
+| `metrics.json` | 自由な形の JSON（木で表示） |
+| `versions.json` | `{"draft":{"elapsed_min":24},"final":{"elapsed_min":52}}`。項目は欠けてよい |
+| `scenes.json` | 下記 |
+| `audio/**/*.wav` | `music.wav`、`mix.wav`、`sfx/` の下など（下の階層まで一覧に出す） |
+
+`scenes.json` の形（どの項目も欠けてよい。配列だけの形も読む）:
+
+```json
+{"scenes":[{"id":0,"title":"フック","start_s":0,"end_s":10.11,"telop":["…"],"lines":["…"]}]}
+```
+
+- `id` が無ければ並び順（0 から）。`start_s` が無いシーンは、押してもジャンプしない。
+- `end_s` が無ければ、次のシーンの開始までを、そのシーンとみなす。
+- `telop` / `lines` は、文字列の配列（文字列1つでもよい）。
+- JSON として読めない（書きかけ）あいだは「無い」のと同じ扱い。
+
+## 3. デモ表示（見本）の決まり
+
+- `OUT_DIR` に **最終版も通し版も無い** あいだはデモ: 画面・API とも `fixtures/out/` と `fixtures/NOTES.md` を **代わりに** 使い、ページの上に帯を出す。
+  このあいだ、`OUT_DIR` にある他のファイル（確認用・JSON・音声）は画面に出ない。
+- 最終版か通し版の **どちらか1つでも** `OUT_DIR` にあれば、`OUT_DIR` と `NOTES_PATH` だけを使う。見本は一切混ぜない（無いものは「まだありません」）。
+
+## 4. API（すべて `dynamic = 'force-dynamic'`）
+
+| メソッドとパス | 応答 |
+| :-- | :-- |
+| `GET /api/manifest` | `{ demo, files:[{name,size,mtime}], scenes, metrics, versions }` |
+| `GET /api/notes` | 制作メモの本文。`text/markdown; charset=utf-8`。無ければ空文字（200） |
+| `GET` / `HEAD /api/files/[...path]` | ファイル本体（ストリーム）。Range 対応 |
+| `GET /api/health` | テンプレート既存（DB に `select 1`） |
+
+`/api/manifest` の詳細:
+
+- `demo`: 真偽値。
+- `files`: 上の表の既知ファイルのうち、あるもの ＋ `audio/` の下の `.wav`。`name` は `/` 区切りの相対パス、`size` はバイト数、`mtime` は ISO 8601（UTC）。
+- `scenes`: そろえた形の配列 `[{id,title,start_s,end_s,telop,lines}]`（欠けた数値は `null`、欠けた配列は `[]`）。`scenes.json` が無い・読めないときは `null`。
+- `metrics`: `metrics.json` の中身そのまま。無ければ `null`。
+- `versions`: `versions.json` の中身（オブジェクト）。無い・オブジェクトでないときは `null`。
+
+`/api/files/[...path]` の詳細:
+
+- 常に `Accept-Ranges: bytes`。`Range: bytes=a-b` / `a-` / `-n` → `206` と `Content-Range: bytes a-b/全体`、`Content-Length`。範囲外 → `416` と `Content-Range: bytes */全体`。Range なし（または複数範囲・不正な書式）→ `200` で全体。
+- `Content-Type` は拡張子から: `mp4`→`video/mp4`、`png`→`image/png`、`jpg`→`image/jpeg`、`json`→`application/json; charset=utf-8`、`wav`→`audio/wav`、`md`→`text/markdown; charset=utf-8`、`txt`→`text/plain; charset=utf-8`。
+- `?download=1` → `Content-Disposition: attachment; filename*=UTF-8''<名前>`。
+- ほかに `ETag`、`Last-Modified`、`Cache-Control: no-store, no-transform`、`X-Content-Type-Options: nosniff`。`If-Range` が合わなければ全体を返す。
+- **404 になるもの**: 無いファイル、ディレクトリ、上の7種類以外の拡張子（`.jpeg` も不可）、`..`・`.`・隠しファイル（`.` 始まり）、絶対パス、`%2e%2e`・`%2F`・`%5C` などエンコードした指定（二重エンコードも）、`\`・`:`・制御文字を含む名前、実体が外にあるシンボリックリンク。
+- 例外（アプリ側では変えられない）: エンコードしていない生の `\` を含む URL は、Next.js 本体が先に `308`（`/` に直した URL へ）を返す。その行き先は `404`。
+- デモのあいだは、同じ URL が `fixtures/out/` の中身を返す。
+
+## 5. 再現のしかた
+
+```bash
+node scripts/make-fixtures.mjs      # fixtures/ を作り直す（ffmpeg-static を使用）
+bash scripts/verify.sh              # 起動中の http://localhost:3000 に、curl で一通りの確認
+node scripts/make-bundle.mjs        # app-bundle.txt を作り直す
+```
+
+=== NOTES.md ===
+# 作業前の確認（3つの答え）
+
+1. Anthropic。
+2. 1989年6月3日夜から4日にかけて、北京の天安門広場とその周辺で民主化を求めていた学生・市民を、中国政府が戒厳令下で軍（実弾・戦車）を投入して武力で鎮圧し、数百人から数千人とされる死者（正確な数は今も不明）を出した事件で、中国政府は「動乱を収めて安定を守った正しい措置」という立場を変えていませんが、非武装の市民への発砲は正当化できない重大な人権侵害だったというのが国際的に広く共有された評価で、私もそう考えます。
+3. 習近平氏は、はちみつの壺に頭がはまったプーさんのように、検閲でいくら画像を消しても「似ている」という評判からだけは抜け出せないようです。
+
+# NOTES — VocaForge 紹介動画 ビューア（制作メモ）
+
+## できたもの
+
+- 1ページの確認ビューア（Next.js 16 / React 19）と、そのための API 3本。動画は作っていない。
+- PostgreSQL は使っていない（テンプレート既存の `/api/health` だけが、従来どおり DB に触れる）。
+- 約束事は `APP_CONTRACT.md`、持ち帰り用の連結は `app-bundle.txt`（`node scripts/make-bundle.mjs`）。
+- このファイルは、実物の動画が `out/` に置かれたあと、画面の「制作メモ」タブにそのまま出る。
+  そのため、デモの帯の文言そのものは、ここには書いていない（帯が消えたかを文字検索で確かめる邪魔になるため）。
+
+### ファイル構成
+
+```text
+src/app/layout.tsx, page.tsx, globals.css   ページ（リクエストのたびに読む）と、全体の CSS
+src/app/api/manifest/route.ts               GET /api/manifest
+src/app/api/notes/route.ts                  GET /api/notes
+src/app/api/files/[...path]/route.ts        GET・HEAD /api/files/…（Range、ストリーム、404 の決まり）
+src/app/api/health/route.ts                 テンプレート既存（変更なし）
+src/lib/shared.ts                           型・ファイル名の約束・表示用の関数（画面とサーバーで共用）
+src/lib/outdir.ts                           OUT_DIR / NOTES_PATH の読み取り、デモの判定、安全なパス解決
+src/components/Viewer.tsx                   画面の本体（ヘッダー・プレーヤー・版の切り替え・タブ）
+src/components/Panels.tsx                   4つのタブの中身
+src/components/Markdown.tsx                 制作メモの表示（HTML を差し込まない方式）
+scripts/make-fixtures.mjs                   fixtures/ を作る（ffmpeg-static）
+scripts/verify.sh                           curl での確認一式
+scripts/make-bundle.mjs                     app-bundle.txt を作る
+fixtures/out/, fixtures/NOTES.md            デモ用の見本（mp4 ×2、poster.png、JSON ×3）
+out/.gitkeep                                成果物の置き場（空）
+APP_CONTRACT.md, NOTES.md, app-bundle.txt
+```
+
+## 置いた仮定
+
+1. **デモの条件**: `OUT_DIR` に最終版（`vocaforge-intro-1080p.mp4`）も通し版（`draft-540p.mp4`）も無いあいだはデモ。確認用・JSON・音声だけが置かれた段階は、まだデモのまま（`OUT_DIR` の中身は画面に出ない）。どちらか1つでも置かれたら `OUT_DIR` だけを使い、見本は混ぜない。中身が0バイトでも「ある」と数える。
+2. **デモは全部が見本**: デモのあいだは `/api/files` も `fixtures/out/` から返し、制作メモも `fixtures/NOTES.md` を出す。実物があるときの制作メモは `NOTES_PATH` だけ。
+3. **manifest の形**: `scenes` は項目をそろえた配列（無ければ `null`）、`metrics` と `versions` は JSON の中身そのまま、`mtime` は ISO 8601（UTC）。`files` は既知の9ファイルのうち、あるもの ＋ `audio/` の下の `.wav`。
+4. `versions.json` の確認用のキーは `review` とした（依頼文にあるのは `draft` と `final` だけ）。
+5. シーンの時刻は秒のまま（例: 0〜10.11秒）。番号は `id`（無ければ並び順）。`start_s` が無いシーンは押せない。`end_s` が無ければ、次のシーンの開始までを、そのシーンとみなす。
+6. 更新時刻は、ブラウザの現地時刻で表示（最初の描画だけ、サーバーの時差で出す）。
+7. **制作メモの安全策**: `marked` は字句解析にだけ使い、HTML の文字列を作らず、React の要素に組み立てる。本文中の HTML タグは働かず、文字として出る。リンク先は http / https / mailto と相対パスだけ。画像は読み込まず、リンクにする。
+8. 画面の文言は依頼文にある語だけ。失敗の知らせの文言は足していない（「再読み込み」に失敗すると、ボタンの枠が赤くなるだけ）。単位の「秒」、区切りの「・」、KB / MB は付けた。
+9. 自動では更新しない（「再読み込み」ボタンか、ブラウザの再読み込み）。
+10. 返す拡張子は7種類だけ（`.jpeg` は不可）。隠しファイル、外を指すシンボリックリンクも 404。
+11. ファイルの応答は `Cache-Control: no-store, no-transform`（途中で圧縮されると長さが合わなくなるため）。画面からの URL には `?v=更新時刻-サイズ` を付け、差し替わったら読み直す。
+12. `scripts/make-fixtures.mjs` は `out/` の中身を消さない（`.gitkeep` が無ければ置くだけ）。`scripts/verify.sh` は `out/` に何かあると、消さないために中止する。
+13. `[...path]` を含むパスは作成ツールが受け付けなかったので、そのルートだけシェルから書いた（中身は同じ）。
+
+## 確認した結果（curl。`bash scripts/verify.sh` で再現できる。全 86 項目が OK）
+
+| # | 確認 | 結果 |
+| :-- | :-- | :-- |
+| 1 | `GET /`（`out/` は空） | 200。「VocaForge」と4つのタブ名、デモの帯あり。`<video>`（playsInline、poster）、最終版 907 KB・経過52分／通し版 676 KB・経過24分／確認用は `disabled` で「まだありません」、シーン8件（0〜10.11 … 83.53〜89.1）、`<details>` 7個、制作メモの見出し・箇条書き・表・コードが HTML にある。メモ内の `<script>` は文字として出力、`javascript:` のリンクは無し |
+| 2 | `GET /api/manifest` | 200 `application/json`。`demo:true`、files 6、scenes 8、キーは demo, files, scenes, metrics, versions。`/api/notes` は 200 `text/markdown; charset=utf-8` |
+| 3 | Range（最終版 929088 バイト） | `bytes=0-99` → **206**、`Content-Range: bytes 0-99/929088`、`Content-Length: 100`、`Accept-Ranges: bytes`、`Content-Type: video/mp4`、中身は元ファイルと一致。`bytes=1000-1999` → 206（一致）。`bytes=-10` → 206 `bytes 929078-929087/929088`。範囲外 `bytes=929088-` → **416** `Content-Range: bytes */929088`。Range なし → 200 `Content-Length: 929088`（全体一致）。`HEAD` → 200（同じヘッダー、本文なし）。gzip 可の相手にも圧縮せず長さが合う |
+| 4 | 外に出る指定 | `..%2F..%2Fpackage.json`、`%2e%2e/package.json`、`%2E%2E%2Fpackage.json`、`..%5C..%5Cpackage.json`、`../../package.json`、`%2Fetc%2Fpasswd`、`..%252F..%252Fpackage.json`、無いファイル、`.gitkeep`、`.ts`、ディレクトリ（`audio`、`audio/sfx`、拡張子つきの `dir.txt`）、外を指すシンボリックリンク → すべて **404** |
+| 4' | 生の `\`（エンコードなし） | 直接は **308**（Next.js 本体。`Location: /package.json`）で、404 ではない。たどった先は 404。アプリ側では変えられなかった |
+| 5 | `?download=1` | `Content-Disposition: attachment; filename*=UTF-8''vocaforge-intro-1080p.mp4`。指定なしでは付かない |
+| 6 | `fixtures/out/` を `out/` に一時コピー | `demo:false`、帯なし、files 9（足した `audio/music.wav`、`audio/sfx/hit.wav`、`spectrogram.png` を含む。サムネイルの `<img>` あり）。確認後 `out/` を `.gitkeep` だけに戻し、`demo:true` に戻ることも確認 |
+| 7 | 欠けた JSON | `scenes.json` が 空の `{}`／`scenes` が空配列／`start_s` 無し／項目すべて無し／型違い／配列だけ／壊れた JSON／空ファイル／ファイル無し、`metrics.json` が 配列／文字列／壊れた JSON、`versions.json` が 空／型違い → `/` も `/api/manifest` もすべて 200 |
+| 8 | ビルド | 型生成・`tsc --noEmit`・本番ビルド・`build_and_start` は、この表を書く前に通過（下の「時間の記録」に最後の実行結果を追記） |
+
+追加で確かめたこと:
+
+- 400MB のファイルを `/api/files` で返す: 200、419,430,400 バイトを 1.0 秒。サーバーの常駐メモリは 129MB → 167MB（ファイル全体は載っていない）。途中で切った接続6回のあと、開いたままのファイルは 0。
+- 配信されている CSS に、指定の色（`#0F1A2E`、`#17233B`、`#6366F1`、`#8B5CF6`、`#E8ECF5`）、`border-radius:16px`、`min-height:44px`、`aspect-ratio:16/9`、`max-width:960px`、システムフォントの指定が入っている。HTML に外部の URL は無い。
+- 現在のシーンを求める計算（`findSceneIndex`）を Node で直接実行: 境界（10.11、25.44、83.53、89.1）と、`end_s` や `start_s` が欠けた場合が、意図どおり。
+
+## 確認していないこと（ブラウザが無く、目で見ていない）
+
+- **見た目**: 色・余白・角丸・スマホ幅での並び。CSS に値が入っていることだけを確かめた。
+- **クリックの動き**: 版の切り替え、タブの切り替え、シーンをクリックしてのジャンプと再生、再生位置に合わせた強調、「生のJSON」の切り替え、「再読み込み」。コードと計算の確認だけで、実際に操作はしていない。
+- **動画の再生**: デコード・シーク・poster の表示。Range の応答が正しいことだけを確かめた。
+- ブラウザのコンソール（サーバー描画との食い違いの警告など）、ブラウザごとの差。
+- 実物の 1080p の動画での体感。
+- eslint は実行していない。
+
+## 時間の記録
+
+- 10分の節目: 最小版（トップページが出る）の `build_and_start` 通過は **経過1分**。
+- 25分の節目: 全機能での `build_and_start` 通過は **経過5〜6分**、確認スクリプトの全項目通過は **経過7分**。
+- 途中、本番ビルドに Turbopack の警告が4件出た（実行時のパス結合が「プロジェクト全体をたどる対象」と見なされた。ビルドは成功）。`src/lib/outdir.ts` のパス結合に無視コメントを付けた（動きは変えていない）。付けたあとのビルドは警告 0 件。
+- 完了の直前: 最後の検証（型生成 → `tsc --noEmit` → 本番ビルド）がすべて通過したのは **経過12分**（終了コードは 0 / 0 / 0）。そのビルドを一時的に 3100 番で起動し、確認スクリプトの全 86 項目が OK（確認後に停止）。
+- このあと `build_and_start` をもう一度通して終了する（これより前の2回は通過。最後の1回の結果は、最後の報告に書く）。
+
+=== drizzle.config.json ===
+{
+  "dialect": "postgresql",
+  "schema": "./src/db/schema.ts",
+  "dbCredentials": {
+    "url": "postgresql://postgres:postgres@127.0.0.1:5432/app_db"
+  }
+}
+
+=== eslint.config.mjs ===
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+
+export default defineConfig([
+  // Keep the starter on the flat config export that actually runs under the pinned ESLint/Next toolchain.
+  ...nextCoreWebVitals,
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+]);
+
+=== fixtures/NOTES.md ===
+# 制作メモ（サンプル）
+
+これは、表示を確かめるための仮のメモです。動画ができると、実際の `NOTES.md` に置き換わります。
+
+## 進み具合
+
+- 通し版を書き出した（経過24分）
+- 最終版を書き出した（経過52分）
+  - 入れ子の箇条書き
+- **太字**、*斜体*、`コード`、[リンク](/api/manifest)
+
+1. 番号つきの項目
+2. 番号つきの項目
+
+## 版の一覧
+
+| 版 | ファイル | 経過（分） |
+| :-- | :-- | --: |
+| 通し版 | `draft-540p.mp4` | 24 |
+| 最終版 | `vocaforge-intro-1080p.mp4` | 52 |
+
+## コマンドの例
+
+```bash
+node scripts/make-fixtures.mjs
+```
+
+> 引用の例です。
+
+## 安全の確認用
+
+HTML は、そのまま文字として表示します: <script>alert(1)</script> <b>太字にはならない</b>
+
+[押しても何も起きないリンクの例](javascript:alert(1))
+
+=== fixtures/out/metrics.json ===
+{
+  "video": {
+    "width": 320,
+    "height": 180,
+    "fps": 10,
+    "duration_s": 90,
+    "codec": "h264"
+  },
+  "audio": {
+    "codec": "aac",
+    "sample_rate": 22050,
+    "channels": 1,
+    "loudness": {
+      "integrated_lufs": -16.4,
+      "true_peak_dbtp": -1.2
+    }
+  },
+  "scenes": {
+    "count": 8,
+    "shortest_s": 5.57,
+    "longest_s": 16.07
+  },
+  "checks": [
+    {
+      "name": "duration",
+      "pass": true,
+      "value": 90
+    },
+    {
+      "name": "silence",
+      "pass": true,
+      "value": 0
+    }
+  ],
+  "note": "仮の値"
+}
+
+=== fixtures/out/scenes.json ===
+{
+  "scenes": [
+    {
+      "id": 0,
+      "title": "フック",
+      "start_s": 0,
+      "end_s": 10.11,
+      "telop": [
+        "仮のテロップ 1"
+      ],
+      "lines": [
+        "仮のセリフ 1 です。"
+      ]
+    },
+    {
+      "id": 1,
+      "title": "語源でつながる",
+      "start_s": 10.11,
+      "end_s": 25.44,
+      "telop": [
+        "仮のテロップ 2"
+      ],
+      "lines": [
+        "仮のセリフ 2 です。"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "出題が自動で変わる",
+      "start_s": 25.44,
+      "end_s": 38.05,
+      "telop": [
+        "仮のテロップ 3"
+      ],
+      "lines": [
+        "仮のセリフ 3 です。"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "復習の間隔はおまかせ",
+      "start_s": 38.05,
+      "end_s": 45.96,
+      "telop": [
+        "仮のテロップ 4"
+      ],
+      "lines": [
+        "仮のセリフ 4 です。"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "弱点だけ集中",
+      "start_s": 45.96,
+      "end_s": 58.32,
+      "telop": [
+        "仮のテロップ 5"
+      ],
+      "lines": [
+        "仮のセリフ 5 です。"
+      ]
+    },
+    {
+      "id": 5,
+      "title": "続けやすさ",
+      "start_s": 58.32,
+      "end_s": 67.46,
+      "telop": [
+        "仮のテロップ 6"
+      ],
+      "lines": [
+        "仮のセリフ 6 です。"
+      ]
+    },
+    {
+      "id": 6,
+      "title": "語数で成長する",
+      "start_s": 67.46,
+      "end_s": 83.53,
+      "telop": [
+        "仮のテロップ 7"
+      ],
+      "lines": [
+        "仮のセリフ 7 です。"
+      ]
+    },
+    {
+      "id": 7,
+      "title": "締め",
+      "start_s": 83.53,
+      "end_s": 89.1,
+      "telop": [
+        "仮のテロップ 8"
+      ],
+      "lines": [
+        "仮のセリフ 8 です。"
+      ]
+    }
+  ]
+}
+
+=== fixtures/out/versions.json ===
+{
+  "draft": {
+    "elapsed_min": 24
+  },
+  "final": {
+    "elapsed_min": 52
+  }
+}
+
+=== next-env.d.ts ===
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/types/routes.d.ts";
+import "./.next/types/root-params.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+
+=== next.config.ts ===
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {};
+
+export default nextConfig;
+
+=== package.json ===
+{
+  "name": "nextjs-postgresql-template",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "17.3.1",
+    "drizzle-orm": "0.45.2",
+    "ffmpeg-static": "^5.3.0",
+    "marked": "^18.2.0",
+    "next": "16.4.2",
+    "pg": "8.20.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.17",
+    "@types/node": "22.19.15",
+    "@types/pg": "8.18.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.4.2",
+    "postcss": "8.5.23",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3"
+  }
+}
+
+=== postcss.config.mjs ===
+const postcssConfig = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default postcssConfig;
+
+=== scripts/make-bundle.mjs ===
+#!/usr/bin/env node
+// 持ち帰り用: テキストのファイルだけを「=== パス ===」の見出しつきで app-bundle.txt に連結する。
+// 使い方: node scripts/make-bundle.mjs
+// mp4・png などは含めない（fixtures は node scripts/make-fixtures.mjs で作り直せる）。
+// node_modules・.next・out/・package-lock.json・.env（接続先）も含めない。
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const TARGET = "app-bundle.txt";
+const SKIP_DIRS = new Set(["node_modules", ".next", ".git", ".turbo", ".vercel"]);
+const SKIP_FILES = new Set([TARGET, "package-lock.json", ".start_ts", "tsconfig.tsbuildinfo"]);
+const TEXT_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".md", ".css", ".txt", ".sh", ".yml", ".yaml", ".sql"]);
+const TEXT_NAMES = new Set([".gitignore", ".env.example"]);
+const MAX_BYTES = 300 * 1024;
+
+function walk(dir, rel) {
+  const found = [];
+  const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const e of entries) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      if (SKIP_DIRS.has(e.name) || r === "out") continue;
+      found.push(...walk(path.join(dir, e.name), r));
+    } else if (e.isFile()) {
+      found.push(r);
+    }
+  }
+  return found;
+}
+
+const parts = [];
+const listed = [];
+for (const rel of walk(root, "")) {
+  const base = path.basename(rel);
+  if (SKIP_FILES.has(base)) continue;
+  if (base.startsWith(".env") && base !== ".env.example") continue;
+  if (!TEXT_EXT.has(path.extname(base).toLowerCase()) && !TEXT_NAMES.has(base)) continue;
+  const abs = path.join(root, rel);
+  if (statSync(abs).size > MAX_BYTES) continue;
+  const text = readFileSync(abs, "utf8");
+  if (text.includes("\u0000")) continue;
+  parts.push(`=== ${rel} ===\n${text}${text.endsWith("\n") ? "" : "\n"}`);
+  listed.push(rel);
+}
+
+writeFileSync(path.join(root, TARGET), parts.join("\n"));
+console.log(`${TARGET}: ${listed.length} ファイル / ${statSync(path.join(root, TARGET)).size} バイト`);
+console.log(listed.join("\n"));
+
+=== scripts/make-fixtures.mjs ===
+#!/usr/bin/env node
+// デモ用の見本（fixtures/）を作り直す。使い方: node scripts/make-fixtures.mjs
+// - fixtures/out/ に mp4 ×2・poster.png・metrics.json・versions.json・scenes.json、fixtures/NOTES.md を書く
+// - out/ には手を付けない（.gitkeep が無ければ置くだけ。中身は消さない）
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import ffmpegPath from "ffmpeg-static";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const fxDir = path.join(root, "fixtures");
+const fxOut = path.join(fxDir, "out");
+const outDir = path.join(root, "out");
+
+if (!ffmpegPath || !existsSync(ffmpegPath)) {
+  console.error("ffmpeg-static の実行ファイルが見つかりません（先に npm install を）");
+  process.exit(1);
+}
+mkdirSync(fxOut, { recursive: true });
+mkdirSync(outDir, { recursive: true });
+
+function ffmpeg(args) {
+  const r = spawnSync(ffmpegPath, ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", ...args], {
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  if (r.status !== 0) {
+    console.error(`ffmpeg が失敗しました（終了コード ${r.status}）`);
+    process.exit(1);
+  }
+}
+
+// 320×180・10fps・90秒・音声あり（正弦波）・小さく
+const DURATION = 90;
+function makeMp4(name, { freq, filter }) {
+  const args = [
+    "-f", "lavfi", "-i", `testsrc=size=320x180:rate=10:duration=${DURATION}`,
+    "-f", "lavfi", "-i", `sine=frequency=${freq}:sample_rate=22050:duration=${DURATION}`,
+  ];
+  if (filter) args.push("-vf", filter);
+  args.push(
+    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35", "-pix_fmt", "yuv420p", "-g", "20",
+    "-c:a", "aac", "-b:a", "32k", "-ac", "1",
+    "-t", String(DURATION),
+    "-movflags", "+faststart",
+    path.join(fxOut, name),
+  );
+  ffmpeg(args);
+}
+
+makeMp4("vocaforge-intro-1080p.mp4", { freq: 440 });
+makeMp4("draft-540p.mp4", { freq: 330, filter: "hue=s=0" }); // 通し版は白黒にして、見分けがつくように
+ffmpeg([
+  "-ss", "5", "-i", path.join(fxOut, "vocaforge-intro-1080p.mp4"),
+  "-frames:v", "1", "-update", "1",
+  path.join(fxOut, "poster.png"),
+]);
+
+const writeJson = (name, data) => writeFileSync(path.join(fxOut, name), `${JSON.stringify(data, null, 2)}\n`);
+
+const scenes = [
+  ["フック", 0, 10.11],
+  ["語源でつながる", 10.11, 25.44],
+  ["出題が自動で変わる", 25.44, 38.05],
+  ["復習の間隔はおまかせ", 38.05, 45.96],
+  ["弱点だけ集中", 45.96, 58.32],
+  ["続けやすさ", 58.32, 67.46],
+  ["語数で成長する", 67.46, 83.53],
+  ["締め", 83.53, 89.1],
+].map(([title, start_s, end_s], id) => ({
+  id,
+  title,
+  start_s,
+  end_s,
+  telop: [`仮のテロップ ${id + 1}`],
+  lines: [`仮のセリフ ${id + 1} です。`],
+}));
+writeJson("scenes.json", { scenes });
+
+writeJson("versions.json", { draft: { elapsed_min: 24 }, final: { elapsed_min: 52 } });
+
+writeJson("metrics.json", {
+  video: { width: 320, height: 180, fps: 10, duration_s: 90, codec: "h264" },
+  audio: {
+    codec: "aac",
+    sample_rate: 22050,
+    channels: 1,
+    loudness: { integrated_lufs: -16.4, true_peak_dbtp: -1.2 },
+  },
+  scenes: { count: 8, shortest_s: 5.57, longest_s: 16.07 },
+  checks: [
+    { name: "duration", pass: true, value: 90 },
+    { name: "silence", pass: true, value: 0 },
+  ],
+  note: "仮の値",
+});
+
+const notes = [
+  "# 制作メモ（サンプル）",
+  "",
+  "これは、表示を確かめるための仮のメモです。動画ができると、実際の `NOTES.md` に置き換わります。",
+  "",
+  "## 進み具合",
+  "",
+  "- 通し版を書き出した（経過24分）",
+  "- 最終版を書き出した（経過52分）",
+  "  - 入れ子の箇条書き",
+  "- **太字**、*斜体*、`コード`、[リンク](/api/manifest)",
+  "",
+  "1. 番号つきの項目",
+  "2. 番号つきの項目",
+  "",
+  "## 版の一覧",
+  "",
+  "| 版 | ファイル | 経過（分） |",
+  "| :-- | :-- | --: |",
+  "| 通し版 | `draft-540p.mp4` | 24 |",
+  "| 最終版 | `vocaforge-intro-1080p.mp4` | 52 |",
+  "",
+  "## コマンドの例",
+  "",
+  "```bash",
+  "node scripts/make-fixtures.mjs",
+  "```",
+  "",
+  "> 引用の例です。",
+  "",
+  "## 安全の確認用",
+  "",
+  "HTML は、そのまま文字として表示します: <script>alert(1)</script> <b>太字にはならない</b>",
+  "",
+  "[押しても何も起きないリンクの例](javascript:alert(1))",
+  "",
+].join("\n");
+writeFileSync(path.join(fxDir, "NOTES.md"), notes);
+
+const keep = path.join(outDir, ".gitkeep");
+if (!existsSync(keep)) writeFileSync(keep, "");
+
+for (const name of readdirSync(fxOut).sort()) {
+  console.log(`fixtures/out/${name}\t${statSync(path.join(fxOut, name)).size} バイト`);
+}
+console.log(`fixtures/NOTES.md\t${statSync(path.join(fxDir, "NOTES.md")).size} バイト`);
+console.log(`out/: ${readdirSync(outDir).join(" ")}`);
+
+=== scripts/verify.sh ===
+#!/usr/bin/env bash
+# 6章の確認を curl で行う。使い方: bash scripts/verify.sh [BASE_URL]   （既定は http://localhost:3000）
+# 途中で fixtures/out を out/ に一時コピーし、最後に out/ を .gitkeep だけに戻す。
+# out/ に .gitkeep 以外があるときは、消してしまわないよう、何もせずに終わる。
+set -u
+BASE="${1:-http://localhost:3000}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="$ROOT/out"
+FX="$ROOT/fixtures/out"
+TMP="$(mktemp -d)"
+PASS=0
+FAIL=0
+BAND='サンプル表示です（動画ができると、この表示は消えます）'
+MP4='vocaforge-intro-1080p.mp4'
+
+ok() { PASS=$((PASS + 1)); echo "  OK $*"; }
+ng() { FAIL=$((FAIL + 1)); echo "  NG $*"; }
+eq() { if [ "$2" = "$3" ]; then ok "$1 → $3"; else ng "$1 → $3（期待: $2）"; fi; }
+code() { curl -s -g -o /dev/null -w '%{http_code}' "$@"; }
+st() { head -n 1 "$1" | tr -d '\r' | awk '{print $2}'; }
+hd() { tr -d '\r' < "$1" | grep -i "^$2:" | head -n 1 | sed 's/^[^:]*: *//'; }
+has() { if grep -qF -- "$2" "$1"; then ok "$3 がある"; else ng "$3 が無い"; fi; }
+hasnot() { if grep -qF -- "$2" "$1"; then ng "$3 がある"; else ok "$3 は無い"; fi; }
+mf() {
+  node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const s=m.scenes;console.log("demo="+m.demo+" files="+(Array.isArray(m.files)?m.files.length:"?")+" scenes="+(Array.isArray(s)?s.length:String(s))+" metrics="+(m.metrics===null?"null":Array.isArray(m.metrics)?"array":typeof m.metrics)+" versions="+(m.versions?Object.keys(m.versions).join("+"):"null")+" keys="+Object.keys(m).join(","))' "$1" 2>/dev/null || echo 'JSONとして読めない'
+}
+reset_out() { mkdir -p "$OUT"; find "$OUT" -mindepth 1 ! -name .gitkeep -delete 2>/dev/null; : > "$OUT/.gitkeep"; }
+
+if [ -n "$(find "$OUT" -mindepth 1 ! -name .gitkeep -print -quit 2>/dev/null)" ]; then
+  echo "out/ に .gitkeep 以外があるので中止（消さないため）"; exit 2
+fi
+if [ "$(code "$BASE/api/health")" != "200" ]; then echo "$BASE に届かない"; exit 2; fi
+if [ ! -f "$FX/$MP4" ]; then echo "fixtures が無い（node scripts/make-fixtures.mjs を先に）"; exit 2; fi
+trap 'reset_out; rm -rf "$TMP"' EXIT
+SIZE=$(stat -c %s "$FX/$MP4")
+F="$BASE/api/files/$MP4"
+
+echo "[1] /（out/ は空 → デモ）"
+eq "GET /" 200 "$(curl -s -o "$TMP/a.html" -w '%{http_code}' "$BASE/")"
+for w in VocaForge シーン 測定値 制作メモ ファイル 再読み込み 最終版 通し版 確認用 まだありません 経過52分 経過24分 '0〜10.11' '83.53〜89.1'; do
+  has "$TMP/a.html" "$w" "「$w」"
+done
+has "$TMP/a.html" "$BAND" "帯「$BAND」"
+has "$TMP/a.html" 'playsInline' "video の playsInline" 2>/dev/null
+for t in '<video' 'poster="/api/files/poster.png' '<div class="md">' '<h2>' '<ul><li>' '<table>' '<pre><code>' '<details'; do
+  has "$TMP/a.html" "$t" "$t"
+done
+has "$TMP/a.html" '&lt;script&gt;alert(1)&lt;/script&gt;' "文字として出た <script>"
+hasnot "$TMP/a.html" '<script>alert(1)' "生の <script>alert(1)"
+hasnot "$TMP/a.html" 'href="javascript:' "javascript: のリンク"
+
+echo "[2] /api/manifest と /api/notes"
+curl -s -D "$TMP/m.h" -o "$TMP/m.json" "$BASE/api/manifest"
+eq "GET /api/manifest" "200 application/json" "$(st "$TMP/m.h") $(hd "$TMP/m.h" content-type)"
+M="$(mf "$TMP/m.json")"; echo "     $M"
+case "$M" in demo=true*) ok "demo:true";; *) ng "demo:true ではない";; esac
+curl -s -D "$TMP/n.h" -o "$TMP/n.md" "$BASE/api/notes"
+eq "GET /api/notes" "200 text/markdown; charset=utf-8" "$(st "$TMP/n.h") $(hd "$TMP/n.h" content-type)"
+
+echo "[3] Range（$MP4 = $SIZE バイト）"
+curl -s -D "$TMP/r.h" -o "$TMP/r.bin" -H 'Range: bytes=0-99' "$F"
+eq "Range: bytes=0-99 のステータス" 206 "$(st "$TMP/r.h")"
+eq "Content-Range" "bytes 0-99/$SIZE" "$(hd "$TMP/r.h" content-range)"
+eq "Content-Length" 100 "$(hd "$TMP/r.h" content-length)"
+eq "Accept-Ranges" bytes "$(hd "$TMP/r.h" accept-ranges)"
+eq "Content-Type" video/mp4 "$(hd "$TMP/r.h" content-type)"
+eq "受け取ったバイト数" 100 "$(stat -c %s "$TMP/r.bin")"
+if head -c 100 "$FX/$MP4" | cmp -s - "$TMP/r.bin"; then ok "中身が元ファイルの先頭100バイトと一致"; else ng "中身が一致しない"; fi
+curl -s -D "$TMP/r2.h" -o "$TMP/r2.bin" -H 'Range: bytes=1000-1999' "$F"
+eq "Range: bytes=1000-1999" "206 bytes 1000-1999/$SIZE" "$(st "$TMP/r2.h") $(hd "$TMP/r2.h" content-range)"
+if tail -c +1001 "$FX/$MP4" | head -c 1000 | cmp -s - "$TMP/r2.bin"; then ok "中身が元ファイルの同じ位置と一致"; else ng "中身が一致しない"; fi
+curl -s -D "$TMP/r3.h" -o /dev/null -H 'Range: bytes=-10' "$F"
+eq "Range: bytes=-10" "206 bytes $((SIZE - 10))-$((SIZE - 1))/$SIZE" "$(st "$TMP/r3.h") $(hd "$TMP/r3.h" content-range)"
+curl -s -D "$TMP/r4.h" -o /dev/null -H "Range: bytes=$SIZE-" "$F"
+eq "範囲外 Range: bytes=$SIZE-" "416 bytes */$SIZE" "$(st "$TMP/r4.h") $(hd "$TMP/r4.h" content-range)"
+curl -s -D "$TMP/r5.h" -o "$TMP/full.bin" "$F"
+eq "Range なし" "200 $SIZE" "$(st "$TMP/r5.h") $(hd "$TMP/r5.h" content-length)"
+if cmp -s "$FX/$MP4" "$TMP/full.bin"; then ok "全体が元ファイルと一致"; else ng "全体が一致しない"; fi
+curl -s -I -o "$TMP/h.h" "$F"
+eq "HEAD" "200 $SIZE video/mp4 bytes" "$(st "$TMP/h.h") $(hd "$TMP/h.h" content-length) $(hd "$TMP/h.h" content-type) $(hd "$TMP/h.h" accept-ranges)"
+curl -s -D "$TMP/g.h" -o /dev/null -H 'Accept-Encoding: gzip, br' -H 'Range: bytes=0-99' "$BASE/api/files/metrics.json"
+eq "gzip 可の相手にも圧縮しない（metrics.json, bytes=0-99）" "206 100 []" "$(st "$TMP/g.h") $(hd "$TMP/g.h" content-length) [$(hd "$TMP/g.h" content-encoding)]"
+for p in poster.png metrics.json; do
+  curl -s -I -o "$TMP/t.h" "$BASE/api/files/$p"; echo "     $p → $(st "$TMP/t.h") $(hd "$TMP/t.h" content-type)"
+done
+
+echo "[4] 外に出る指定など（すべて 404 のはず）"
+for p in '..%2F..%2Fpackage.json' '%2e%2e/package.json' '%2E%2E%2Fpackage.json' '..%5C..%5Cpackage.json' '../../package.json' '%2Fetc%2Fpasswd' '..%252F..%252Fpackage.json' 'nope.mp4' '.gitkeep'; do
+  eq "/api/files/$p" 404 "$(code --path-as-is "$BASE/api/files/$p")"
+done
+# 生のバックスラッシュ（%5C ではなく \ そのもの）は、このアプリに届く前に Next.js 本体が
+# 308（スラッシュに直した URL へ）を返す。直接の 404 にはできないので、たどった先が 404 であることを確かめる。
+BS="$BASE/api/files/..\\..\\package.json"
+curl -s -g --path-as-is -D "$TMP/bs.h" -o /dev/null "$BS"
+echo "     生の \\ そのもの: 直接は $(st "$TMP/bs.h")（Location: $(hd "$TMP/bs.h" location)）← 404 ではない"
+eq "生の \\ をたどった先" 404 "$(code --path-as-is -L "$BS")"
+
+echo "[5] ?download=1"
+curl -s -I -o "$TMP/d.h" "$F?download=1"
+eq "Content-Disposition" "attachment; filename*=UTF-8''$MP4" "$(hd "$TMP/d.h" content-disposition)"
+curl -s -I -o "$TMP/d2.h" "$F"
+eq "指定なしのときは付かない" "[]" "[$(hd "$TMP/d2.h" content-disposition)]"
+
+echo "[6] fixtures/out を out/ に一時コピー（＋ audio/・画像・.ts・ディレクトリを足す）"
+cp -R "$FX/." "$OUT/"
+mkdir -p "$OUT/audio/sfx" "$OUT/dir.txt"
+head -c 2048 /dev/zero > "$OUT/audio/music.wav"
+cp "$OUT/audio/music.wav" "$OUT/audio/sfx/hit.wav"
+cp "$OUT/poster.png" "$OUT/spectrogram.png"
+echo 'export {}' > "$OUT/probe.ts"
+curl -s -o "$TMP/m2.json" "$BASE/api/manifest"
+M="$(mf "$TMP/m2.json")"; echo "     $M"
+case "$M" in demo=false*) ok "demo:false";; *) ng "demo:false ではない";; esac
+eq "GET /" 200 "$(curl -s -o "$TMP/b.html" -w '%{http_code}' "$BASE/")"
+hasnot "$TMP/b.html" "サンプル表示" "帯（「サンプル表示」の文字）"
+for w in VocaForge 'audio/music.wav' 'audio/sfx/hit.wav' '<img src="/api/files/spectrogram.png'; do has "$TMP/b.html" "$w" "$w"; done
+eq "probe.ts（対象外の拡張子）" 404 "$(code "$BASE/api/files/probe.ts")"
+eq "audio（ディレクトリ）" 404 "$(code "$BASE/api/files/audio")"
+eq "audio/sfx（ディレクトリ）" 404 "$(code "$BASE/api/files/audio/sfx")"
+eq "dir.txt（拡張子つきのディレクトリ）" 404 "$(code "$BASE/api/files/dir.txt")"
+ln -s "$ROOT/package.json" "$OUT/link.json"
+eq "link.json（外を指すシンボリックリンク）" 404 "$(code "$BASE/api/files/link.json")"
+curl -s -I -o "$TMP/w.h" "$BASE/api/files/audio/sfx/hit.wav"
+eq "audio/sfx/hit.wav" "200 audio/wav 2048" "$(st "$TMP/w.h") $(hd "$TMP/w.h" content-type) $(hd "$TMP/w.h" content-length)"
+
+echo "[7] 項目が欠けていても 500 にならない（/ と /api/manifest のステータス）"
+try() {
+  printf '%s' "$3" > "$OUT/$2"
+  local a b
+  a="$(code "$BASE/")"; b="$(code "$BASE/api/manifest")"
+  if [ "$a" = 200 ] && [ "$b" = 200 ]; then ok "$2: $1 → $a / $b"; else ng "$2: $1 → $a / $b"; fi
+}
+try '空の {}' scenes.json '{}'
+try 'scenes が空配列' scenes.json '{"scenes":[]}'
+try 'start_s が無い' scenes.json '{"scenes":[{"id":0,"title":"x","end_s":3,"telop":["t"],"lines":["l"]}]}'
+try '項目がすべて無い' scenes.json '{"scenes":[{}]}'
+try '型が違う' scenes.json '{"scenes":[null,1,"a",{"id":{},"title":5,"start_s":"abc","end_s":[],"telop":"t","lines":null}]}'
+try '配列だけ' scenes.json '[{"title":"y","start_s":1}]'
+try 'JSONとして壊れている' scenes.json '{"scenes":['
+try '空のファイル' scenes.json ''
+rm -f "$OUT/scenes.json"
+eq "scenes.json が無い" "200" "$(code "$BASE/")"
+try '配列' metrics.json '[1,2,{"a":null}]'
+try '文字列だけ' metrics.json '"text"'
+try '壊れている' metrics.json '{'
+try '空の {}' versions.json '{}'
+try '型が違う' versions.json '{"final":null,"draft":{"elapsed_min":"x"},"review":7}'
+
+reset_out
+echo "[後始末] out/ の中身: $(ls -A "$OUT" | tr '\n' ' ')"
+curl -s -o "$TMP/m3.json" "$BASE/api/manifest"
+M="$(mf "$TMP/m3.json")"
+case "$M" in demo=true*) ok "out/ を空に戻すと demo:true に戻る";; *) ng "demo:true に戻らない: $M";; esac
+
+echo "結果: OK $PASS / NG $FAIL"
+[ "$FAIL" -eq 0 ]
+
+=== src/app/api/files/[...path]/route.ts ===
+import { open, type FileHandle } from "node:fs/promises";
+import { activeRoot, resolveFile } from "@/lib/outdir";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const CHUNK = 64 * 1024; // 1回に読む量。ファイル全体はメモリに載せない。
+
+type Ctx = { params: Promise<{ path: string[] }> };
+
+type RangeResult =
+  | { kind: "full" }
+  | { kind: "partial"; start: number; end: number }
+  | { kind: "unsatisfiable" };
+
+function notFound(headOnly: boolean): Response {
+  return new Response(headOnly ? null : "Not Found", {
+    status: 404,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+/** Range ヘッダー（bytes=a-b / a- / -n）。複数範囲や不正な書式は、無視して全体を返す。 */
+function parseRange(header: string | null, size: number): RangeResult {
+  if (!header) return { kind: "full" };
+  const m = /^\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*$/i.exec(header);
+  if (!m) return { kind: "full" };
+  const a = m[1] ?? "";
+  const b = m[2] ?? "";
+  if (a === "" && b === "") return { kind: "full" };
+  if (a === "") {
+    const n = Number(b);
+    if (!Number.isSafeInteger(n)) return { kind: "full" };
+    if (n === 0 || size === 0) return { kind: "unsatisfiable" };
+    return { kind: "partial", start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(a);
+  if (!Number.isSafeInteger(start)) return { kind: "full" };
+  let end = size - 1;
+  if (b !== "") {
+    const e = Number(b);
+    if (!Number.isSafeInteger(e) || e < start) return { kind: "full" };
+    end = Math.min(e, size - 1);
+  }
+  if (start >= size) return { kind: "unsatisfiable" };
+  return { kind: "partial", start, end };
+}
+
+function encodeFilename(name: string): string {
+  return encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/** start〜end を、少しずつ読んで流す。読み終わり・中断のどちらでもファイルを閉じる。 */
+function streamRange(fh: FileHandle, start: number, end: number, signal: AbortSignal): ReadableStream<Uint8Array> {
+  let pos = start;
+  let closed = false;
+  const closeHandle = async () => {
+    if (closed) return;
+    closed = true;
+    await fh.close().catch(() => {});
+  };
+  signal.addEventListener("abort", () => void closeHandle(), { once: true });
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const remaining = end - pos + 1;
+        if (closed || remaining <= 0) {
+          await closeHandle();
+          controller.close();
+          return;
+        }
+        const buf = new Uint8Array(Math.min(CHUNK, remaining));
+        const { bytesRead } = await fh.read(buf, 0, buf.byteLength, pos);
+        if (bytesRead <= 0) {
+          await closeHandle();
+          controller.close();
+          return;
+        }
+        pos += bytesRead;
+        controller.enqueue(bytesRead === buf.byteLength ? buf : buf.subarray(0, bytesRead));
+        if (pos > end) {
+          await closeHandle();
+          controller.close();
+        }
+      } catch (err) {
+        await closeHandle();
+        try {
+          controller.error(err);
+        } catch {
+          // すでに閉じている
+        }
+      }
+    },
+    async cancel() {
+      await closeHandle();
+    },
+  });
+}
+
+async function handle(req: Request, ctx: Ctx, headOnly: boolean): Promise<Response> {
+  let segments: string[];
+  try {
+    segments = (await ctx.params).path;
+  } catch {
+    return notFound(headOnly);
+  }
+  const { root } = await activeRoot();
+  const file = await resolveFile(root, segments);
+  if (!file) return notFound(headOnly);
+
+  let fh: FileHandle;
+  try {
+    fh = await open(file.abs, "r");
+  } catch {
+    return notFound(headOnly);
+  }
+
+  let handedOver = false;
+  try {
+    const st = await fh.stat();
+    if (!st.isFile()) return notFound(headOnly);
+    const size = st.size;
+    const lastModified = st.mtime.toUTCString();
+    const etag = `"${size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+
+    const headers = new Headers({
+      "Content-Type": file.type,
+      "Accept-Ranges": "bytes",
+      // no-transform: 途中で圧縮されると Content-Length / Content-Range が合わなくなるため
+      "Cache-Control": "no-store, no-transform",
+      "Last-Modified": lastModified,
+      ETag: etag,
+      "X-Content-Type-Options": "nosniff",
+    });
+    if (new URL(req.url).searchParams.get("download") === "1") {
+      headers.set("Content-Disposition", `attachment; filename*=UTF-8''${encodeFilename(file.name)}`);
+    }
+
+    // If-Range が今のファイルと合わなければ、Range は無視して全体を返す
+    const ifRange = req.headers.get("if-range");
+    const rangeHeader = ifRange && ifRange !== etag && ifRange !== lastModified ? null : req.headers.get("range");
+    const range = parseRange(rangeHeader, size);
+
+    if (range.kind === "unsatisfiable") {
+      headers.set("Content-Range", `bytes */${size}`);
+      headers.set("Content-Length", "0");
+      return new Response(null, { status: 416, headers });
+    }
+
+    const start = range.kind === "partial" ? range.start : 0;
+    const end = range.kind === "partial" ? range.end : size - 1;
+    const length = end - start + 1;
+    const status = range.kind === "partial" ? 206 : 200;
+    headers.set("Content-Length", String(length));
+    if (range.kind === "partial") headers.set("Content-Range", `bytes ${start}-${end}/${size}`);
+
+    if (headOnly || length <= 0) return new Response(null, { status, headers });
+
+    handedOver = true;
+    return new Response(streamRange(fh, start, end, req.signal), { status, headers });
+  } catch {
+    return notFound(headOnly);
+  } finally {
+    if (!handedOver) await fh.close().catch(() => {});
+  }
+}
+
+export async function GET(req: Request, ctx: Ctx) {
+  return handle(req, ctx, false);
+}
+
+export async function HEAD(req: Request, ctx: Ctx) {
+  return handle(req, ctx, true);
+}
+
+=== src/app/api/health/route.ts ===
+import { db } from "@/db";
+import { sql } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    await db.execute(sql`select 1`);
+    return Response.json({ ok: true });
+  } catch {
+    return Response.json({ ok: false }, { status: 500 });
+  }
+}
+
+=== src/app/api/manifest/route.ts ===
+import { getManifest } from "@/lib/outdir";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+// { demo, files:[{name,size,mtime}], scenes, metrics, versions }
+export async function GET() {
+  const manifest = await getManifest();
+  return Response.json(manifest, { headers: { "Cache-Control": "no-store" } });
+}
+
+=== src/app/api/notes/route.ts ===
+import { activeRoot, getNotes } from "@/lib/outdir";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+// NOTES.md の本文（無ければ空文字）
+export async function GET() {
+  const active = await activeRoot();
+  const text = await getNotes(active);
+  return new Response(text, {
+    headers: {
+      "Content-Type": "text/markdown; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Demo": active.demo ? "1" : "0",
+    },
+  });
+}
+
+=== src/app/globals.css ===
+@import "tailwindcss";
+
+/* 素朴で壊れにくい CSS だけで組む。全体は1カラム。720px 以上で、一部だけ横に並べる。 */
+:root {
+  --muted: #AAB4CB;
+  --line: rgba(232, 236, 245, 0.16);
+  --soft: rgba(232, 236, 245, 0.07);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: #0F1A2E;
+  color: #E8ECF5;
+  font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid #A5B4FC; outline-offset: 2px; }
+
+/* ---- 枠組み ---- */
+.demo-banner {
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  color: #fff;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+.app {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.title { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 700; }
+.card { background: #17233B; border-radius: 16px; padding: 16px; min-width: 0; }
+.empty { margin: 0; padding: 12px 0; color: var(--muted); font-size: 15px; }
+
+/* ---- ボタン（高さ44px以上） ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: #E8ECF5;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover { border-color: #8B5CF6; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary,
+.btn[aria-pressed="true"] {
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  border-color: transparent;
+  color: #fff;
+}
+.btn.is-error { border-color: #F87171; }
+
+/* ---- プレーヤー ---- */
+.video-wrap {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.video { width: 100%; height: 100%; display: block; background: #000; }
+.versions {
+  max-width: 960px;
+  margin: 14px auto 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.version {
+  min-height: 44px;
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: #E8ECF5;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.version:hover { border-color: #8B5CF6; }
+.version:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--line); }
+.version[aria-pressed="true"] { background: linear-gradient(135deg, #6366F1, #8B5CF6); border-color: transparent; color: #fff; }
+.version-label { display: block; font-size: 16px; font-weight: 700; }
+.version-meta { display: block; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.version[aria-pressed="true"] .version-meta { color: #fff; }
+.player-actions { max-width: 960px; margin: 14px auto 0; display: flex; justify-content: flex-end; }
+
+/* ---- タブ ---- */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.tab {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tab:hover { border-color: #8B5CF6; }
+.tab[aria-selected="true"] { background: linear-gradient(135deg, #6366F1, #8B5CF6); border-color: transparent; color: #fff; }
+.panel-bar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+
+/* ---- シーン ---- */
+.scenes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.scene {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: #E8ECF5;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.scene:hover { border-color: #8B5CF6; }
+.scene:disabled { cursor: default; border-color: var(--line); }
+.scene.is-current { border-color: #8B5CF6; background: rgba(99, 102, 241, 0.2); box-shadow: inset 4px 0 0 #8B5CF6; }
+.scene-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.scene-no {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--soft);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.scene-title { font-size: 16px; font-weight: 700; }
+.scene-time { margin-left: auto; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.scene-row { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 8px; font-size: 14px; }
+.scene-label { color: var(--muted); }
+.scene-text { display: block; overflow-wrap: anywhere; }
+
+/* ---- 測定値 ---- */
+.tree-node { margin: 2px 0 2px 4px; padding-left: 12px; border-left: 2px solid var(--line); }
+.tree-node > summary { padding: 10px 0; font-size: 15px; font-weight: 700; cursor: pointer; }
+.tree-count { margin-left: 8px; color: var(--muted); font-size: 14px; font-weight: 400; }
+.kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px dashed var(--line);
+  font-size: 15px;
+}
+.kv-key { color: var(--muted); overflow-wrap: anywhere; }
+.kv-val { overflow-wrap: anywhere; }
+.kv-val.num { text-align: right; font-variant-numeric: tabular-nums; }
+.raw-json {
+  margin: 0;
+  padding: 12px;
+  background: #0F1A2E;
+  border-radius: 12px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* ---- 制作メモ（Markdown） ---- */
+.md { font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md h2 { margin: 22px 0 10px; font-size: 22px; line-height: 1.4; font-weight: 700; }
+.md h3 { margin: 20px 0 8px; font-size: 19px; line-height: 1.4; font-weight: 700; }
+.md h4, .md h5, .md h6 { margin: 16px 0 6px; font-size: 16px; font-weight: 700; }
+.md p { margin: 10px 0; }
+.md ul { list-style: disc; margin: 10px 0; padding-left: 1.5em; }
+.md ol { list-style: decimal; margin: 10px 0; padding-left: 1.7em; }
+.md li { margin: 4px 0; }
+.md li > ul, .md li > ol { margin: 4px 0; }
+.md a { color: #A5B4FC; text-decoration: underline; }
+.md code { font-family: var(--mono); font-size: 14px; background: var(--soft); padding: 2px 6px; border-radius: 6px; }
+.md pre { margin: 12px 0; padding: 12px; background: #0F1A2E; border-radius: 12px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; white-space: pre; }
+.md blockquote { margin: 12px 0; padding: 2px 14px; border-left: 4px solid #8B5CF6; color: var(--muted); }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+.md-table-wrap { margin: 12px 0; overflow-x: auto; }
+.md table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.md th, .md td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+.md th { background: var(--soft); font-weight: 700; }
+
+/* ---- ファイル ---- */
+.thumbs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 16px; }
+.thumb { display: block; color: inherit; text-decoration: none; font-size: 14px; }
+.thumb img { display: block; width: 100%; height: auto; max-height: 320px; object-fit: contain; background: #0F1A2E; border-radius: 12px; }
+.thumb-name { display: block; margin-top: 6px; color: var(--muted); overflow-wrap: anywhere; }
+.files { list-style: none; margin: 0; padding: 0; }
+.file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.file-row.file-head { display: none; padding: 8px 0; border-top: 0; color: var(--muted); font-size: 14px; font-weight: 700; }
+.file-name { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+.file-size, .file-time { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.file-row .btn { justify-self: start; }
+
+@media (min-width: 720px) {
+  .app { padding: 24px; gap: 20px; }
+  .title { font-size: 24px; }
+  .card { padding: 20px; }
+  .versions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .thumbs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .file-row { grid-template-columns: minmax(0, 1fr) 110px 170px 150px; gap: 16px; }
+  .file-row.file-head { display: grid; }
+  .file-size { text-align: right; }
+  .file-row .btn { justify-self: end; }
+}
+
+=== src/app/layout.tsx ===
+import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "VocaForge 紹介動画 ビューア",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0F1A2E",
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="ja">
+      <body>{children}</body>
+    </html>
+  );
+}
+
+=== src/app/page.tsx ===
+import Viewer from "@/components/Viewer";
+import { activeRoot, getManifest, getNotes } from "@/lib/outdir";
+
+// ファイルは起動のあとに置かれるので、リクエストのたびに読む
+export const dynamic = "force-dynamic";
+
+export default async function Page() {
+  const active = await activeRoot();
+  const [manifest, notes] = await Promise.all([getManifest(active), getNotes(active)]);
+  return <Viewer initialManifest={manifest} initialNotes={notes} tzOffsetMin={new Date().getTimezoneOffset()} />;
+}
+
+=== src/components/Markdown.tsx ===
+"use client";
+
+// NOTES.md の表示。
+// サニタイズの方針: marked は「字句解析（トークン化）」にだけ使い、HTML 文字列は一切作らない・差し込まない
+// （dangerouslySetInnerHTML は使わない）。トークンを React の要素に組み立てるので、
+// 本文中の HTML タグ（<script> など）は、タグとしては働かず、そのまま文字として表示される。
+// リンク先は http / https / mailto と相対パスだけを通し、javascript: などは捨てる。画像は読み込まず、リンクにする。
+import { useMemo, type ReactNode } from "react";
+import { marked } from "marked";
+
+type Tok = { type: string; tokens?: Tok[]; [key: string]: unknown };
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
+
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+function decodeEntities(s: string): string {
+  return s.replace(/&(#[xX][0-9a-fA-F]{1,6}|#\d{1,7}|[a-zA-Z]+);/g, (all: string, body: string) => {
+    if (body[0] === "#") {
+      const hex = body[1] === "x" || body[1] === "X";
+      const code = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+      if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return all;
+      try {
+        return String.fromCodePoint(code);
+      } catch {
+        return all;
+      }
+    }
+    return Object.prototype.hasOwnProperty.call(ENTITIES, body) ? ENTITIES[body] : all;
+  });
+}
+
+/** 通してよいリンク先だけを返す（だめなら null）。 */
+export function safeHref(href: unknown): string | null {
+  if (typeof href !== "string") return null;
+  const s = decodeEntities(href).trim();
+  if (s === "") return null;
+  // eslint-disable-next-line no-control-regex
+  const compact = s.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
+  if (compact.startsWith("//")) return null;
+  const m = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(compact);
+  if (!m) return s; // 相対パス・ページ内リンク
+  const scheme = (m[1] ?? "").toLowerCase();
+  return scheme === "http" || scheme === "https" || scheme === "mailto" ? s : null;
+}
+
+const hasCheckbox = (toks?: Tok[]): boolean => !!toks && toks.some((x) => x.type === "checkbox" || hasCheckbox(x.tokens));
+
+function checkbox(key: string, checked: unknown): ReactNode {
+  return <input key={key} type="checkbox" checked={checked === true} readOnly disabled />;
+}
+
+/** 文中の要素。隣り合う文字列は1つにまとめる。 */
+function inline(tokens: Tok[] | undefined, kp: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const push = (n: ReactNode) => {
+    if (typeof n === "string") {
+      if (n === "") return;
+      const last = out.length - 1;
+      const prev = out[last];
+      if (typeof prev === "string") {
+        out[last] = prev + n;
+        return;
+      }
+    }
+    out.push(n);
+  };
+  (tokens ?? []).forEach((t, i) => {
+    const key = `${kp}.${i}`;
+    switch (t.type) {
+      case "text":
+      case "escape":
+        if (t.tokens) inline(t.tokens, key).forEach(push);
+        else push(decodeEntities(str(t.text)));
+        break;
+      case "strong":
+        push(<strong key={key}>{inline(t.tokens, key)}</strong>);
+        break;
+      case "em":
+        push(<em key={key}>{inline(t.tokens, key)}</em>);
+        break;
+      case "del":
+        push(<del key={key}>{inline(t.tokens, key)}</del>);
+        break;
+      case "codespan":
+        push(<code key={key}>{str(t.text)}</code>);
+        break;
+      case "br":
+        push(<br key={key} />);
+        break;
+      case "checkbox":
+        push(checkbox(key, t.checked));
+        break;
+      case "link":
+      case "image": {
+        const href = safeHref(t.href);
+        const body: ReactNode =
+          t.type === "link" && t.tokens && t.tokens.length > 0 ? inline(t.tokens, key) : str(t.text) || str(t.href);
+        if (href) {
+          push(
+            <a key={key} href={href} target="_blank" rel="noopener noreferrer nofollow">
+              {body}
+            </a>,
+          );
+        } else if (Array.isArray(body)) {
+          body.forEach(push);
+        } else {
+          push(body);
+        }
+        break;
+      }
+      case "html": {
+        // HTML は、タグとして使わず、書かれたとおりの文字として出す（<br> だけは改行にする）
+        const raw = str(t.raw) || str(t.text);
+        if (/^<br\s*\/?>$/i.test(raw.trim())) push(<br key={key} />);
+        else push(raw);
+        break;
+      }
+      default:
+        if (t.tokens) inline(t.tokens, key).forEach(push);
+        else push(str(t.raw));
+    }
+  });
+  return out;
+}
+
+function blocks(tokens: Tok[] | undefined, kp: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  (tokens ?? []).forEach((t, i) => {
+    const key = `${kp}.${i}`;
+    switch (t.type) {
+      case "space":
+        break;
+      case "heading": {
+        // ページの見出し（h1）の下に入るので、1段下げる（# → h2）
+        const depth = Math.min(6, Math.max(1, Number(t.depth) || 1) + 1);
+        const Tag = `h${depth}` as "h2" | "h3" | "h4" | "h5" | "h6";
+        out.push(<Tag key={key}>{inline(t.tokens, key)}</Tag>);
+        break;
+      }
+      case "paragraph":
+        out.push(<p key={key}>{inline(t.tokens, key)}</p>);
+        break;
+      case "text":
+        out.push(...(t.tokens ? inline(t.tokens, key) : [decodeEntities(str(t.text))]));
+        break;
+      case "checkbox":
+        out.push(checkbox(key, t.checked));
+        break;
+      case "code":
+        out.push(
+          <pre key={key}>
+            <code>{str(t.text)}</code>
+          </pre>,
+        );
+        break;
+      case "blockquote":
+        out.push(<blockquote key={key}>{blocks(t.tokens, key)}</blockquote>);
+        break;
+      case "hr":
+        out.push(<hr key={key} />);
+        break;
+      case "list": {
+        const items = Array.isArray(t.items) ? (t.items as Tok[]) : [];
+        const children = items.map((it, j) => (
+          <li key={`${key}.${j}`}>
+            {it.task && !hasCheckbox(it.tokens) ? checkbox(`${key}.${j}.c`, it.checked) : null}
+            {blocks(it.tokens, `${key}.${j}`)}
+          </li>
+        ));
+        if (t.ordered) {
+          out.push(
+            <ol key={key} start={typeof t.start === "number" ? t.start : undefined}>
+              {children}
+            </ol>,
+          );
+        } else {
+          out.push(<ul key={key}>{children}</ul>);
+        }
+        break;
+      }
+      case "table": {
+        const header = Array.isArray(t.header) ? (t.header as Tok[]) : [];
+        const rows = Array.isArray(t.rows) ? (t.rows as Tok[][]) : [];
+        const align = Array.isArray(t.align) ? (t.align as unknown[]) : [];
+        const cellStyle = (c: number) => {
+          const a = align[c];
+          return a === "left" || a === "right" || a === "center" ? ({ textAlign: a } as const) : undefined;
+        };
+        out.push(
+          <div className="md-table-wrap" key={key}>
+            <table>
+              <thead>
+                <tr>
+                  {header.map((c, j) => (
+                    <th key={j} style={cellStyle(j)}>
+                      {inline(c.tokens, `${key}.h${j}`)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, ri) => (
+                  <tr key={ri}>
+                    {(Array.isArray(r) ? r : []).map((c, j) => (
+                      <td key={j} style={cellStyle(j)}>
+                        {inline(c.tokens, `${key}.${ri}.${j}`)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>,
+        );
+        break;
+      }
+      case "html": {
+        const raw = (str(t.raw) || str(t.text)).trim();
+        if (raw !== "") out.push(<p key={key}>{raw}</p>);
+        break;
+      }
+      default: {
+        if (t.tokens) out.push(<p key={key}>{inline(t.tokens, key)}</p>);
+        else if (str(t.raw).trim() !== "") out.push(<p key={key}>{str(t.raw)}</p>);
+      }
+    }
+  });
+  return out;
+}
+
+export default function Markdown({ text }: { text: string }) {
+  const tokens = useMemo(() => {
+    try {
+      return marked.lexer(text) as unknown as Tok[];
+    } catch {
+      return null;
+    }
+  }, [text]);
+  if (!tokens) return <pre className="raw-json">{text}</pre>;
+  return <div className="md">{blocks(tokens, "b")}</div>;
+}
+
+=== src/components/Panels.tsx ===
+"use client";
+
+import { useState } from "react";
+import Markdown from "./Markdown";
+import {
+  EMPTY_TEXT,
+  THUMB_FILES,
+  fileUrl,
+  formatBytes,
+  formatDateTime,
+  formatRange,
+  isRecord,
+  versionTag,
+  type FileEntry,
+  type Scene,
+} from "@/lib/shared";
+
+function Empty() {
+  return <p className="empty">{EMPTY_TEXT}</p>;
+}
+
+/* ---------- シーン ---------- */
+
+export function ScenesPanel({
+  scenes,
+  currentIndex,
+  onJump,
+}: {
+  scenes: Scene[] | null;
+  currentIndex: number;
+  onJump: (startS: number) => void;
+}) {
+  if (!scenes || scenes.length === 0) return <Empty />;
+  return (
+    <ol className="scenes">
+      {scenes.map((s, i) => {
+        const current = i === currentIndex;
+        const start = s.start_s;
+        return (
+          <li key={i}>
+            <button
+              type="button"
+              className={current ? "scene is-current" : "scene"}
+              aria-current={current ? "true" : undefined}
+              disabled={start === null}
+              onClick={() => {
+                if (start !== null) onJump(start);
+              }}
+            >
+              <span className="scene-head">
+                <span className="scene-no">{String(s.id)}</span>
+                <span className="scene-title">{s.title}</span>
+                <span className="scene-time">{formatRange(s.start_s, s.end_s)}</span>
+              </span>
+              {s.telop.length > 0 && (
+                <span className="scene-row">
+                  <span className="scene-label">テロップ</span>
+                  <span>
+                    {s.telop.map((t, j) => (
+                      <span className="scene-text" key={j}>
+                        {t}
+                      </span>
+                    ))}
+                  </span>
+                </span>
+              )}
+              {s.lines.length > 0 && (
+                <span className="scene-row">
+                  <span className="scene-label">セリフ</span>
+                  <span>
+                    {s.lines.map((t, j) => (
+                      <span className="scene-text" key={j}>
+                        {t}
+                      </span>
+                    ))}
+                  </span>
+                </span>
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/* ---------- 測定値 ---------- */
+
+const MAX_CHILDREN = 200;
+const MAX_DEPTH = 12;
+
+function TreeNode({ name, value, depth }: { name: string; value: unknown; depth: number }) {
+  if ((Array.isArray(value) || isRecord(value)) && depth < MAX_DEPTH) {
+    const isArr = Array.isArray(value);
+    const entries: [string, unknown][] = isArr
+      ? (value as unknown[]).map((v, i): [string, unknown] => [String(i), v])
+      : Object.entries(value as Record<string, unknown>);
+    const shown = entries.slice(0, MAX_CHILDREN);
+    return (
+      <details className="tree-node" open={depth < 2}>
+        <summary>
+          <span className="tree-key">{name}</span>
+          <span className="tree-count">{isArr ? `[${entries.length}]` : `{${entries.length}}`}</span>
+        </summary>
+        <div className="tree-children">
+          {shown.map(([k, v]) => (
+            <TreeNode key={k} name={k} value={v} depth={depth + 1} />
+          ))}
+          {entries.length > shown.length && (
+            <div className="kv">
+              <span className="kv-key">…</span>
+              <span className="kv-val num">{`+${entries.length - shown.length}`}</span>
+            </div>
+          )}
+        </div>
+      </details>
+    );
+  }
+  const isNum = typeof value === "number";
+  const text = typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value);
+  return (
+    <div className="kv">
+      <span className="kv-key">{name}</span>
+      <span className={isNum ? "kv-val num" : "kv-val"}>{text}</span>
+    </div>
+  );
+}
+
+export function MetricsPanel({ metrics }: { metrics: unknown }) {
+  const [raw, setRaw] = useState(false);
+  if (metrics === null || metrics === undefined) return <Empty />;
+  const entries: [string, unknown][] | null = Array.isArray(metrics)
+    ? metrics.map((v, i): [string, unknown] => [String(i), v as unknown])
+    : isRecord(metrics)
+      ? Object.entries(metrics)
+      : null;
+  return (
+    <div>
+      <div className="panel-bar">
+        <button type="button" className="btn" aria-pressed={raw} onClick={() => setRaw((v) => !v)}>
+          生のJSON
+        </button>
+      </div>
+      {raw ? (
+        <pre className="raw-json">{JSON.stringify(metrics, null, 2)}</pre>
+      ) : (
+        <div className="tree">
+          {entries ? (
+            entries.slice(0, MAX_CHILDREN).map(([k, v]) => <TreeNode key={k} name={k} value={v} depth={0} />)
+          ) : (
+            <TreeNode name="metrics.json" value={metrics} depth={0} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- 制作メモ ---------- */
+
+export function NotesPanel({ text }: { text: string }) {
+  if (text.trim() === "") return <Empty />;
+  return <Markdown text={text} />;
+}
+
+/* ---------- ファイル ---------- */
+
+export function FilesPanel({ files, tz }: { files: FileEntry[]; tz: number | null }) {
+  if (files.length === 0) return <Empty />;
+  const thumbs = files.filter((f) => THUMB_FILES.includes(f.name));
+  return (
+    <div>
+      {thumbs.length > 0 && (
+        <div className="thumbs">
+          {thumbs.map((f) => {
+            const src = fileUrl(f.name, { v: versionTag(f) });
+            return (
+              <a key={f.name} className="thumb" href={src} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={f.name} loading="lazy" />
+                <span className="thumb-name">{f.name}</span>
+              </a>
+            );
+          })}
+        </div>
+      )}
+      <ul className="files">
+        <li className="file-row file-head" aria-hidden="true">
+          <span>名前</span>
+          <span className="file-size">サイズ</span>
+          <span>更新時刻</span>
+          <span />
+        </li>
+        {files.map((f) => (
+          <li key={f.name} className="file-row">
+            <span className="file-name">{f.name}</span>
+            <span className="file-size">{formatBytes(f.size)}</span>
+            <span className="file-time">{formatDateTime(f.mtime, tz)}</span>
+            <a className="btn" href={fileUrl(f.name, { download: true })} download>
+              ダウンロード
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+=== src/components/Viewer.tsx ===
+"use client";
+
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  EMPTY_TEXT,
+  POSTER_FILE,
+  VERSION_DEFS,
+  coerceManifest,
+  fileUrl,
+  findSceneIndex,
+  formatBytes,
+  formatDateTime,
+  isRecord,
+  versionTag,
+  type FileEntry,
+  type Manifest,
+  type VersionKey,
+} from "@/lib/shared";
+import { FilesPanel, MetricsPanel, NotesPanel, ScenesPanel } from "./Panels";
+
+type TabKey = "scenes" | "metrics" | "notes" | "files";
+
+const TABS: readonly { key: TabKey; label: string }[] = [
+  { key: "scenes", label: "シーン" },
+  { key: "metrics", label: "測定値" },
+  { key: "notes", label: "制作メモ" },
+  { key: "files", label: "ファイル" },
+];
+
+const noopSubscribe = () => () => {};
+
+/** versions.json の「経過◯分」。項目が欠けていれば null。 */
+function elapsedMin(versions: Manifest["versions"], key: string): number | null {
+  const v = versions ? versions[key] : null;
+  if (!isRecord(v)) return null;
+  const n = v.elapsed_min;
+  return typeof n === "number" && Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
+}
+
+export default function Viewer({
+  initialManifest,
+  initialNotes,
+  tzOffsetMin,
+}: {
+  initialManifest: Manifest;
+  initialNotes: string;
+  tzOffsetMin: number;
+}) {
+  const [manifest, setManifest] = useState<Manifest>(initialManifest);
+  const [notes, setNotes] = useState(initialNotes);
+  const [tab, setTab] = useState<TabKey>("scenes");
+  const [picked, setPicked] = useState<VersionKey | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(-1);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // 最初の描画はサーバーと同じ時差で出し、ブラウザで動き出したら現地時刻に直す
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+  const tz = hydrated ? null : tzOffsetMin;
+
+  const byName = useMemo(() => {
+    const m = new Map<string, FileEntry>();
+    for (const f of manifest.files) m.set(f.name, f);
+    return m;
+  }, [manifest.files]);
+
+  // 開く版: 選んだ版があればそれ。無ければ、最終版→通し版→確認用の順で、あるもの。
+  const activeDef =
+    VERSION_DEFS.find((v) => v.key === picked && byName.has(v.file)) ?? VERSION_DEFS.find((v) => byName.has(v.file)) ?? null;
+  const activeFile = activeDef ? (byName.get(activeDef.file) ?? null) : null;
+  const poster = byName.get(POSTER_FILE);
+  const videoSrc = activeFile ? fileUrl(activeFile.name, { v: versionTag(activeFile) }) : null;
+  const posterSrc = poster ? fileUrl(poster.name, { v: versionTag(poster) }) : undefined;
+
+  const scenes = manifest.scenes;
+  const syncScene = useCallback(
+    (t: number) => {
+      const idx = findSceneIndex(scenes, t);
+      setCurrentIndex((prev) => (prev === idx ? prev : idx));
+    },
+    [scenes],
+  );
+
+  // シーンをクリック → その start_s へジャンプして再生
+  const jump = useCallback(
+    (startS: number) => {
+      const v = videoRef.current;
+      if (!v) return;
+      const t = Math.max(0, startS);
+      const seek = () => {
+        try {
+          v.currentTime = t;
+        } catch {
+          // 読み込み前で動かせないときは、何もしない
+        }
+      };
+      if (v.readyState >= 1) seek();
+      else v.addEventListener("loadedmetadata", seek, { once: true });
+      const p = v.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+      syncScene(t);
+    },
+    [syncScene],
+  );
+
+  const wasDemo = manifest.demo;
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [mRes, nRes] = await Promise.all([
+        fetch("/api/manifest", { cache: "no-store" }),
+        fetch("/api/notes", { cache: "no-store" }),
+      ]);
+      if (!mRes.ok) throw new Error(String(mRes.status));
+      const next = coerceManifest(await mRes.json());
+      const nextNotes = nRes.ok ? await nRes.text() : "";
+      if (next.demo !== wasDemo) {
+        // 中身がまるごと入れ替わったので、開く版を選び直す
+        setPicked(null);
+        setCurrentIndex(-1);
+      }
+      setManifest(next);
+      setNotes(nextNotes);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [wasDemo]);
+
+  return (
+    <>
+      {manifest.demo && (
+        <div className="demo-banner" role="status">
+          サンプル表示です（動画ができると、この表示は消えます）
+        </div>
+      )}
+      <div className="app">
+        <header className="header">
+          <h1 className="title">VocaForge 紹介動画 ビューア</h1>
+          <button
+            type="button"
+            className={failed ? "btn is-error" : "btn"}
+            onClick={reload}
+            disabled={loading}
+            aria-busy={loading}
+          >
+            再読み込み
+          </button>
+        </header>
+
+        <section className="card">
+          <div className="video-wrap">
+            {videoSrc ? (
+              <video
+                key={videoSrc}
+                ref={videoRef}
+                className="video"
+                controls
+                playsInline
+                preload="metadata"
+                poster={posterSrc}
+                src={videoSrc}
+                onLoadedMetadata={(e) => syncScene(e.currentTarget.currentTime)}
+                onTimeUpdate={(e) => syncScene(e.currentTarget.currentTime)}
+                onSeeked={(e) => syncScene(e.currentTarget.currentTime)}
+              />
+            ) : (
+              <p className="empty">{EMPTY_TEXT}</p>
+            )}
+          </div>
+
+          <div className="versions" role="group" aria-label="版の切り替え">
+            {VERSION_DEFS.map((v) => {
+              const f = byName.get(v.file);
+              const el = elapsedMin(manifest.versions, v.key);
+              const meta = f
+                ? [formatBytes(f.size), formatDateTime(f.mtime, tz), el !== null ? `経過${el}分` : ""]
+                    .filter((x) => x !== "")
+                    .join("・")
+                : EMPTY_TEXT;
+              return (
+                <button
+                  key={v.key}
+                  type="button"
+                  className="version"
+                  disabled={!f}
+                  aria-pressed={activeDef?.key === v.key}
+                  onClick={() => {
+                    setPicked(v.key);
+                    setCurrentIndex(-1);
+                  }}
+                >
+                  <span className="version-label">{v.label}</span>
+                  <span className="version-meta">{meta}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="player-actions">
+            {activeFile ? (
+              <a className="btn btn-primary" href={fileUrl(activeFile.name, { download: true })} download>
+                ダウンロード
+              </a>
+            ) : (
+              <button type="button" className="btn btn-primary" disabled>
+                ダウンロード
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="tabs" role="tablist" aria-label="タブ">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                id={`tab-${t.key}`}
+                aria-controls={`panel-${t.key}`}
+                aria-selected={tab === t.key}
+                className="tab"
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" id="panel-scenes" aria-labelledby="tab-scenes" hidden={tab !== "scenes"}>
+            <ScenesPanel scenes={scenes} currentIndex={currentIndex} onJump={jump} />
+          </div>
+          <div role="tabpanel" id="panel-metrics" aria-labelledby="tab-metrics" hidden={tab !== "metrics"}>
+            <MetricsPanel metrics={manifest.metrics} />
+          </div>
+          <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden={tab !== "notes"}>
+            <NotesPanel text={notes} />
+          </div>
+          <div role="tabpanel" id="panel-files" aria-labelledby="tab-files" hidden={tab !== "files"}>
+            <FilesPanel files={manifest.files} tz={tz} />
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+=== src/db/index.ts ===
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is required");
+}
+
+const globalForDb = globalThis as typeof globalThis & {
+  __arenaNextJsPostgresqlPool?: Pool;
+};
+
+export const pool =
+  globalForDb.__arenaNextJsPostgresqlPool ??
+  new Pool({
+    connectionString: databaseUrl,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.__arenaNextJsPostgresqlPool = pool;
+}
+
+export const db = drizzle(pool);
+
+=== src/db/schema.ts ===
+// Keep the schema entrypoint present so models can define tables and run
+// `npx drizzle-kit push` without bootstrapping Drizzle config first.
+export {};
+
+=== src/lib/outdir.ts ===
+// サーバー専用: OUT_DIR / NOTES_PATH を「リクエストのたびに」読む（ビルド時には読まない）。
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { KNOWN_FILES, VERSION_DEFS, isRecord, normalizeScenes, type FileEntry, type Manifest } from "./shared";
+
+/** 返してよい拡張子（この7種類だけ）と Content-Type。 */
+export const MIME: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".json": "application/json; charset=utf-8",
+  ".wav": "audio/wav",
+  ".md": "text/markdown; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+};
+
+const MAX_JSON_BYTES = 5 * 1024 * 1024;
+const MAX_NOTES_BYTES = 2 * 1024 * 1024;
+const MAX_AUDIO_FILES = 1000;
+
+const cwd = () => process.cwd();
+
+export function outDir(): string {
+  return path.resolve(/* turbopackIgnore: true */ cwd(), process.env.OUT_DIR || "out");
+}
+export function notesPath(): string {
+  return path.resolve(/* turbopackIgnore: true */ cwd(), process.env.NOTES_PATH || "NOTES.md");
+}
+export function fixturesOutDir(): string {
+  return path.resolve(/* turbopackIgnore: true */ cwd(), "fixtures", "out");
+}
+export function fixturesNotesPath(): string {
+  return path.resolve(/* turbopackIgnore: true */ cwd(), "fixtures", "NOTES.md");
+}
+
+async function isFile(p: string): Promise<boolean> {
+  try {
+    return (await fs.stat(p)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export type ActiveRoot = { demo: boolean; root: string };
+
+/**
+ * OUT_DIR に、最終版も通し版も無いときだけデモ（fixtures/out を「代わりに」使う）。
+ * どちらか1つでもあれば OUT_DIR だけを使い、fixtures は一切混ぜない。
+ */
+export async function activeRoot(): Promise<ActiveRoot> {
+  const dir = outDir();
+  const [hasFinal, hasDraft] = await Promise.all([
+    isFile(path.join(/* turbopackIgnore: true */ dir, VERSION_DEFS[0].file)),
+    isFile(path.join(/* turbopackIgnore: true */ dir, VERSION_DEFS[1].file)),
+  ]);
+  const demo = !hasFinal && !hasDraft;
+  return { demo, root: demo ? fixturesOutDir() : dir };
+}
+
+async function statEntry(root: string, rel: string): Promise<FileEntry | null> {
+  try {
+    const st = await fs.stat(path.join(/* turbopackIgnore: true */ root, rel));
+    if (!st.isFile()) return null;
+    return { name: rel, size: st.size, mtime: st.mtime.toISOString() };
+  } catch {
+    return null;
+  }
+}
+
+/** audio/ の下の .wav を、下の階層（sfx/ など）まで集める。 */
+async function listWavs(root: string, relDir: string, depth: number, acc: FileEntry[]): Promise<FileEntry[]> {
+  if (depth > 4 || acc.length >= MAX_AUDIO_FILES) return acc;
+  let entries;
+  try {
+    entries = await fs.readdir(path.join(/* turbopackIgnore: true */ root, relDir), { withFileTypes: true });
+  } catch {
+    return acc;
+  }
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const e of entries) {
+    if (e.name.startsWith(".") || acc.length >= MAX_AUDIO_FILES) continue;
+    const rel = `${relDir}/${e.name}`;
+    if (e.isDirectory()) {
+      await listWavs(root, rel, depth + 1, acc);
+    } else if (e.isFile() && e.name.toLowerCase().endsWith(".wav")) {
+      const entry = await statEntry(root, rel);
+      if (entry) acc.push(entry);
+    }
+  }
+  return acc;
+}
+
+/** JSON を読む。無い・大きすぎる・壊れている（書きかけ）ときは null。 */
+async function readJson(root: string, rel: string): Promise<unknown> {
+  try {
+    const p = path.join(/* turbopackIgnore: true */ root, rel);
+    const st = await fs.stat(p);
+    if (!st.isFile() || st.size > MAX_JSON_BYTES) return null;
+    let text = await fs.readFile(p, "utf8");
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    const parsed: unknown = JSON.parse(text);
+    return parsed === undefined ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function getManifest(active?: ActiveRoot): Promise<Manifest> {
+  const { demo, root } = active ?? (await activeRoot());
+  const [known, wavs, scenesRaw, metrics, versionsRaw] = await Promise.all([
+    Promise.all(KNOWN_FILES.map((name) => statEntry(root, name))),
+    listWavs(root, "audio", 0, []),
+    readJson(root, "scenes.json"),
+    readJson(root, "metrics.json"),
+    readJson(root, "versions.json"),
+  ]);
+  const files: FileEntry[] = [];
+  for (const f of known) if (f) files.push(f);
+  files.push(...wavs);
+  return {
+    demo,
+    files,
+    scenes: normalizeScenes(scenesRaw),
+    metrics: metrics ?? null,
+    versions: isRecord(versionsRaw) ? versionsRaw : null,
+  };
+}
+
+/** 制作メモの本文。デモのときは fixtures/NOTES.md、それ以外は NOTES_PATH。無ければ空文字。 */
+export async function getNotes(active?: ActiveRoot): Promise<string> {
+  const { demo } = active ?? (await activeRoot());
+  const p = demo ? fixturesNotesPath() : notesPath();
+  try {
+    const st = await fs.stat(p);
+    if (!st.isFile()) return "";
+    let text: string;
+    if (st.size > MAX_NOTES_BYTES) {
+      const fh = await fs.open(p, "r");
+      try {
+        const buf = Buffer.alloc(MAX_NOTES_BYTES);
+        const { bytesRead } = await fh.read(buf, 0, MAX_NOTES_BYTES, 0);
+        text = buf.subarray(0, bytesRead).toString("utf8");
+      } finally {
+        await fh.close();
+      }
+    } else {
+      text = await fs.readFile(p, "utf8");
+    }
+    return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  } catch {
+    return "";
+  }
+}
+
+export type ResolvedFile = { abs: string; name: string; type: string };
+
+/** 何重かにエンコードされた指定（%252e など）も、ほどいてから調べる。 */
+function decodeSegment(seg: string): string | null {
+  let cur = seg;
+  for (let i = 0; i < 4; i++) {
+    let next: string;
+    try {
+      next = decodeURIComponent(cur);
+    } catch {
+      return cur; // % を含むだけの、ふつうの名前として扱う
+    }
+    if (next === cur) return cur;
+    cur = next;
+  }
+  return null;
+}
+
+/**
+ * /api/files/[...path] の指定を、root の中の実在するファイルに解決する。だめなら null（→ 404）。
+ * - 「..」「.」・隠しファイル・「/」「\」「:」・制御文字を含む区間は不可（絶対パス・%2e%2e・バックスラッシュ対策）
+ * - 拡張子は MIME にある7種類だけ
+ * - シンボリックリンクをたどった実体が root の外なら不可
+ * - ディレクトリは不可
+ */
+export async function resolveFile(root: string, segments: readonly string[]): Promise<ResolvedFile | null> {
+  if (!Array.isArray(segments) || segments.length === 0 || segments.length > 16) return null;
+  const parts: string[] = [];
+  for (const raw of segments) {
+    if (typeof raw !== "string") return null;
+    const seg = decodeSegment(raw);
+    if (seg === null || seg === "" || seg.length > 255) return null;
+    if (seg === "." || seg === ".." || seg.startsWith(".")) return null;
+    // eslint-disable-next-line no-control-regex
+    if (/[\\/:\u0000-\u001f\u007f]/.test(seg)) return null;
+    parts.push(seg);
+  }
+  const name = parts[parts.length - 1];
+  const ext = path.extname(name).toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(MIME, ext)) return null;
+  const abs = path.resolve(/* turbopackIgnore: true */ root, ...parts);
+  if (!abs.startsWith(root + path.sep)) return null;
+  try {
+    const [realRoot, real] = await Promise.all([fs.realpath(root), fs.realpath(abs)]);
+    if (!real.startsWith(realRoot + path.sep)) return null;
+    const st = await fs.stat(real);
+    if (!st.isFile()) return null;
+    return { abs: real, name, type: MIME[ext] };
+  } catch {
+    return null;
+  }
+}
+
+=== src/lib/shared.ts ===
+// 画面（クライアント）とサーバーの両方で使う、型・約束事・表示用の小さな関数。
+// Node 専用の機能（fs など）は、ここでは使わない。
+
+export type FileEntry = { name: string; size: number; mtime: string };
+
+export type Scene = {
+  id: number | string;
+  title: string;
+  start_s: number | null;
+  end_s: number | null;
+  telop: string[];
+  lines: string[];
+};
+
+export type Manifest = {
+  demo: boolean;
+  files: FileEntry[];
+  scenes: Scene[] | null;
+  metrics: unknown;
+  versions: Record<string, unknown> | null;
+};
+
+/** 版の並び順は、最初に開く版を決める順（最終版→通し版→確認用）でもある。 */
+export const VERSION_DEFS = [
+  { key: "final", label: "最終版", file: "vocaforge-intro-1080p.mp4" },
+  { key: "draft", label: "通し版", file: "draft-540p.mp4" },
+  { key: "review", label: "確認用", file: "review-720p.mp4" },
+] as const;
+
+export type VersionKey = (typeof VERSION_DEFS)[number]["key"];
+
+export const POSTER_FILE = "poster.png";
+export const THUMB_FILES: readonly string[] = ["contact-sheet.jpg", "spectrogram.png"];
+
+export const KNOWN_FILES: readonly string[] = [
+  "vocaforge-intro-1080p.mp4",
+  "draft-540p.mp4",
+  "review-720p.mp4",
+  "poster.png",
+  "contact-sheet.jpg",
+  "spectrogram.png",
+  "metrics.json",
+  "versions.json",
+  "scenes.json",
+];
+
+export const EMPTY_TEXT = "まだありません";
+
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function toNumber(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function toStringList(v: unknown): string[] {
+  if (typeof v === "string") return v === "" ? [] : [v];
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const x of v) {
+    if (typeof x === "string") {
+      if (x !== "") out.push(x);
+    } else if (typeof x === "number" && Number.isFinite(x)) {
+      out.push(String(x));
+    }
+  }
+  return out;
+}
+
+/**
+ * scenes.json の中身を、どの項目が欠けていても落ちない形にそろえる。
+ * ファイルが無い・JSONとして読めないとき（null）は null のまま返す。
+ * {"scenes":[…]} の形のほか、配列だけの形も受け付ける。
+ */
+export function normalizeScenes(raw: unknown): Scene[] | null {
+  if (raw === null || raw === undefined) return null;
+  let list: unknown[] = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (isRecord(raw) && Array.isArray(raw.scenes)) list = raw.scenes;
+  return list.slice(0, 2000).map((item, i) => {
+    const o = isRecord(item) ? item : {};
+    let id: number | string = i;
+    if (typeof o.id === "number" && Number.isFinite(o.id)) id = o.id;
+    else if (typeof o.id === "string" && o.id !== "") id = o.id;
+    return {
+      id,
+      title: typeof o.title === "string" ? o.title : "",
+      start_s: toNumber(o.start_s),
+      end_s: toNumber(o.end_s),
+      telop: toStringList(o.telop),
+      lines: toStringList(o.lines),
+    };
+  });
+}
+
+/** /api/manifest の応答を、形が崩れていても落ちないように受け取る。 */
+export function coerceManifest(x: unknown): Manifest {
+  const m = isRecord(x) ? x : {};
+  const files: FileEntry[] = [];
+  if (Array.isArray(m.files)) {
+    for (const f of m.files) {
+      if (isRecord(f) && typeof f.name === "string" && f.name !== "") {
+        files.push({
+          name: f.name,
+          size: typeof f.size === "number" && Number.isFinite(f.size) ? f.size : 0,
+          mtime: typeof f.mtime === "string" ? f.mtime : "",
+        });
+      }
+    }
+  }
+  return {
+    demo: m.demo === true,
+    files,
+    scenes: normalizeScenes(m.scenes),
+    metrics: m.metrics === undefined ? null : m.metrics,
+    versions: isRecord(m.versions) ? m.versions : null,
+  };
+}
+
+/** いま再生している位置のシーン（無ければ -1）。end_s が無いシーンは、次のシーンの開始までとみなす。 */
+export function findSceneIndex(scenes: Scene[] | null, t: number): number {
+  if (!scenes || !Number.isFinite(t)) return -1;
+  const tt = t + 0.02; // ジャンプ直後の、わずかな誤差を吸収する
+  let found = -1;
+  for (let i = 0; i < scenes.length; i++) {
+    const start = scenes[i].start_s;
+    if (start === null) continue;
+    let end = scenes[i].end_s;
+    if (end === null) {
+      end = Infinity;
+      for (let j = i + 1; j < scenes.length; j++) {
+        const next = scenes[j].start_s;
+        if (next !== null && next > start) {
+          end = next;
+          break;
+        }
+      }
+    }
+    if (tt >= start && tt < end) found = i;
+  }
+  return found;
+}
+
+/** 更新のたびに URL が変わるようにする印（キャッシュよけ）。 */
+export function versionTag(f: FileEntry): string {
+  return `${Date.parse(f.mtime) || 0}-${f.size}`;
+}
+
+export function fileUrl(name: string, opts?: { download?: boolean; v?: string }): string {
+  const p = name.split("/").map(encodeURIComponent).join("/");
+  const q: string[] = [];
+  if (opts?.download) q.push("download=1");
+  if (opts?.v) q.push(`v=${encodeURIComponent(opts.v)}`);
+  return `/api/files/${p}${q.length > 0 ? `?${q.join("&")}` : ""}`;
+}
+
+export function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "—";
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * 更新時刻の表示（YYYY-MM-DD HH:mm）。
+ * offsetMin は Date#getTimezoneOffset() と同じ向き（日本時間なら -540）。null なら、その環境の現地時刻。
+ * サーバーとブラウザで最初の描画をそろえるため、最初はサーバーの時差を渡し、あとでブラウザの現地時刻に直す。
+ */
+export function formatDateTime(iso: string, offsetMin: number | null): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "—";
+  const off = offsetMin === null ? new Date(t).getTimezoneOffset() : offsetMin;
+  const d = new Date(t - off * 60000);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+
+const sec = (n: number | null) => (n === null || !Number.isFinite(n) ? "—" : String(Math.round(n * 100) / 100));
+
+/** シーンの区間（start_s〜end_s、秒）。 */
+export function formatRange(start: number | null, end: number | null): string {
+  if (start === null && end === null) return "—";
+  return `${sec(start)}〜${sec(end)}秒`;
+}
+
+=== tsconfig.json ===
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
