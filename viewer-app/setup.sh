@@ -176,27 +176,34 @@ step "ビルドの確認"
 DATABASE_URL="${DATABASE_URL:-postgres://u:p@127.0.0.1:5432/x}" npx next build > build.log 2>&1
 if [ $? -eq 0 ]; then say "OK ビルド: next build が通った（ログ: build.log）"; else say "NG ビルド: 失敗。末尾: $(tail -n 5 build.log | tr '\n' ' ')"; fi
 
-# 7. 日本語フォント（Arena には日本語フォントが無いので、同梱する。Noto Sans JP、OFL）
+# 7. 日本語フォント（Arena には日本語フォントが無いので、同梱する。丸みのある Zen Maru Gothic と、Noto Sans JP。どちらも OFL）
 step "日本語フォントを用意"
-mkdir -p fonts _fnt && (cd _fnt && npm pack @expo-google-fonts/noto-sans-jp > /dev/null 2>&1 && tar xzf expo-google-fonts-noto-sans-jp-*.tgz 2>/dev/null)
+mkdir -p fonts _fnt _fnt2
+(cd _fnt && npm pack @expo-google-fonts/zen-maru-gothic > /dev/null 2>&1 && tar xzf expo-google-fonts-zen-maru-gothic-*.tgz 2>/dev/null)
+(cd _fnt2 && npm pack @expo-google-fonts/noto-sans-jp > /dev/null 2>&1 && tar xzf expo-google-fonts-noto-sans-jp-*.tgz 2>/dev/null)
 for w in 400Regular 500Medium 700Bold 900Black; do
-  cp "_fnt/package/$w/NotoSansJP_$w.ttf" fonts/ 2>/dev/null
+  cp "_fnt/package/$w/ZenMaruGothic_$w.ttf" fonts/ 2>/dev/null
+  cp "_fnt2/package/$w/NotoSansJP_$w.ttf" fonts/ 2>/dev/null
 done
-cp _fnt/package/LICENSE_FONT fonts/OFL-LICENSE.txt 2>/dev/null
-rm -rf _fnt
+cp _fnt/package/LICENSE_FONT fonts/OFL-LICENSE-ZenMaruGothic.txt 2>/dev/null
+cp _fnt2/package/LICENSE_FONT fonts/OFL-LICENSE-NotoSansJP.txt 2>/dev/null
+rm -rf _fnt _fnt2
 cat > fonts/register.mjs <<'EOF'
-// 使い方: import { GlobalFonts } from '@napi-rs/canvas'; import './fonts/register.mjs';  → ctx.font = '700 48px "Noto Sans JP"'
+// 使い方: import './fonts/register.mjs'（描画するファイルと、worker_threads の各ワーカーの両方で）
+//   丸みのある主役の書体: ctx.font = '700 48px "Zen Maru Gothic"'
+//   小さな文字・UI の再現・予備:  ctx.font = '500 28px "Noto Sans JP"'
 import { GlobalFonts } from '@napi-rs/canvas';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 for (const w of ['400Regular', '500Medium', '700Bold', '900Black']) {
+  GlobalFonts.registerFromPath(path.join(dir, `ZenMaruGothic_${w}.ttf`), 'Zen Maru Gothic');
   GlobalFonts.registerFromPath(path.join(dir, `NotoSansJP_${w}.ttf`), 'Noto Sans JP');
 }
 EOF
-CF=$(node -e 'import("./fonts/register.mjs").then(async()=>{const {GlobalFonts,createCanvas}=await import("@napi-rs/canvas");const c=createCanvas(400,80);const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,400,80);x.fillStyle="#000";x.font="700 40px \"Noto Sans JP\"";x.fillText("語源でつながる",10,55);const d=x.getImageData(0,0,400,80).data;let n=0;for(let i=0;i<d.length;i+=4)if(d[i]<128)n++;console.log(GlobalFonts.families.some(f=>f.family==="Noto Sans JP")?"登録済み 描画ピクセル"+n:"登録失敗")})' 2>/dev/null)
+CF=$(node -e 'import("./fonts/register.mjs").then(async()=>{const {GlobalFonts,createCanvas}=await import("@napi-rs/canvas");const fam=GlobalFonts.families.map(f=>f.family);const test=(n)=>{const c=createCanvas(400,80);const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,400,80);x.fillStyle="#000";x.font="700 40px \""+n+"\"";x.fillText("語源でつながる",10,55);const d=x.getImageData(0,0,400,80).data;let k=0;for(let i=0;i<d.length;i+=4)if(d[i]<128)k++;return k};console.log((fam.includes("Zen Maru Gothic")?"丸ゴ="+test("Zen Maru Gothic"):"丸ゴ登録失敗")+" "+(fam.includes("Noto Sans JP")?"ノト="+test("Noto Sans JP"):"ノト登録失敗"))})' 2>/dev/null)
 NF=$(ls fonts/*.ttf 2>/dev/null | wc -l)
-say "$([ "$NF" -ge 4 ] && echo "$CF" | grep -q 描画 && echo OK || echo NG) 日本語フォント: fonts/ に Noto Sans JP ${NF}種（400/500/700/900）。fonts/register.mjs を import すると使える（${CF:-確認失敗}）。出典は CREDITS.md に「Noto Sans JP（SIL OFL 1.1）」と書く"
+say "$([ "$NF" -ge 8 ] && echo "$CF" | grep -q '丸ゴ=[0-9]' && echo "$CF" | grep -q 'ノト=[0-9]' && echo OK || echo NG) 日本語フォント: fonts/ に Zen Maru Gothic（丸み・主役）と Noto Sans JP（小さな文字・予備）を各4種（${NF}ファイル）。fonts/register.mjs を import すると使える（描画ピクセル数 ${CF:-確認失敗}）。出典は CREDITS.md に「Zen Maru Gothic・Noto Sans JP（SIL OFL 1.1）」と書く"
 
 # 8. 掃除と締め
 rm -rf _v 2>/dev/null
