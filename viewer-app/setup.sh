@@ -171,6 +171,12 @@ FF=$(node -e 'console.log(require("ffmpeg-static"))' 2>/dev/null)
 [ -n "$FF" ] && FFV=$("$FF" -version 2>/dev/null | head -1)
 say "$([ -n "$FFV" ] && echo OK || echo NG) 映像の道具: ffmpeg-static（${FFV:-不明}）、@napi-rs/canvas、sharp"
 
+# 5b. 丸い表情アイコン（原画から作る。水色の背景は抜かず、円の中に残す。角は透明）
+step "丸い表情アイコンを作る"
+node scripts/make-faces.mjs assets/guide-originals assets/guide-faces 2>&1 | tail -2
+NFA=$(ls assets/guide-faces/*.png 2>/dev/null | wc -l)
+say "$([ "$NFA" -ge 2 ] && echo OK || echo NG) 丸い表情アイコン: assets/guide-faces/ に ${NFA}枚（face-open.png=説明中、face-smile.png=間・うなずき。512×512、角は透明。顔・耳・手が円に収まっている）"
+
 # 6. ビルドの確認
 step "ビルドの確認"
 DATABASE_URL="${DATABASE_URL:-postgres://u:p@127.0.0.1:5432/x}" npx next build > build.log 2>&1
@@ -208,7 +214,7 @@ say "$([ "$NF" -ge 8 ] && echo "$CF" | grep -q '丸ゴ=[0-9]' && echo "$CF" | gr
 # 8. 掃除と締め
 rm -rf _v 2>/dev/null
 say ""
-say "置いたもの: intro-music/  assets/  sfx/  earshot/  fonts/  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
+say "置いたもの: intro-music/  assets/（screens・guide・guide-originals・guide-faces）  sfx/  earshot/  fonts/  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
 say "※ビューアの画面表示・動画再生は、ここでは確認していない。"
 say "完了（経過 $(el)）"
 touch .setup.done
