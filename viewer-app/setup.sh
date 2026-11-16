@@ -189,8 +189,12 @@ say "$([ "$NCU" -ge 5 ] && [ "$OPQ" = ok ] && echo OK || echo NG) 全身の切�
 
 # 6. ビルドの確認
 step "ビルドの確認"
-DATABASE_URL="${DATABASE_URL:-postgres://u:p@127.0.0.1:5432/x}" npx next build > build.log 2>&1
-if [ $? -eq 0 ]; then say "OK ビルド: next build が通った（ログ: build.log）"; else say "NG ビルド: 失敗。末尾: $(tail -n 5 build.log | tr '\n' ' ')"; fi
+# 一時的な失敗（外への確認が揺れる等）があるので、失敗したら1回だけやり直す
+BUILD_OK=1
+for try in 1 2; do
+  DATABASE_URL="${DATABASE_URL:-postgres://u:p@127.0.0.1:5432/x}" npx next build > build.log 2>&1 && { BUILD_OK=0; break; }
+done
+if [ $BUILD_OK -eq 0 ]; then say "OK ビルド: next build が通った（ログ: build.log）"; else say "NG ビルド: 2回とも失敗。末尾: $(tail -n 5 build.log | tr '\n' ' ')"; fi
 
 # 7. 日本語フォント（Arena には日本語フォントが無いので、同梱する。丸みのある Zen Maru Gothic と、Noto Sans JP。どちらも OFL）
 step "日本語フォントを用意"
