@@ -59,12 +59,30 @@ export function headPoint(head, side = 'right') {
   return { fx: head.cx + k * 1.12 * head.rx, fy: head.cy + 0.10 * head.ry };
 }
 
+// 角丸の矩形の輪郭で、点 q にいちばん近い点と、そこでの外向きの法線、輪郭までの距離（外が正、中が負）
+function nearestOnOutline(box, r, q) {
+  const cx = Math.min(box.x + box.w - r, Math.max(box.x + r, q.x));
+  const cy = Math.min(box.y + box.h - r, Math.max(box.y + r, q.y));
+  const vx = q.x - cx, vy = q.y - cy;
+  const len = Math.hypot(vx, vy);
+  if (len < 1e-6) { // 中の芯の矩形にある: いちばん近い辺へ
+    const d = [q.x - box.x, box.x + box.w - q.x, q.y - box.y, box.y + box.h - q.y];
+    const m = Math.min(...d), i = d.indexOf(m);
+    if (i === 0) return { x: box.x, y: q.y, nx: -1, ny: 0, d: -m };
+    if (i === 1) return { x: box.x + box.w, y: q.y, nx: 1, ny: 0, d: -m };
+    if (i === 2) return { x: q.x, y: box.y, nx: 0, ny: -1, d: -m };
+    return { x: q.x, y: box.y + box.h, nx: 0, ny: 1, d: -m };
+  }
+  const nx = vx / len, ny = vy / len;
+  return { x: cx + nx * r, y: cy + ny * r, nx, ny, d: len - r };
+}
+
 export function makeBubble(cfg) {
   const C = {
     margin: 96, family: 'Zen Maru Gothic', fontPx: 46, maxTextW: 600, faceD: 128,
     padX: 40, padY: 28, gap: 28, radius: 44, border: 5, tailW: 54,
     popIn: 0.24, popOut: 0.16, omega: 16, zeta: 0.62, side: 'right', avoid: [],
-    offX: 70, offY: 60, swapDur: 0.18, ...cfg,
+    offX: 70, offY: 60, swapDur: 0.18, leash: 220, ...cfg,
   };
   const cache = new Map();
 
@@ -187,40 +205,37 @@ export function makeBubble(cfg) {
       vx += ax * dt; vy += ay * dt;
       p = { x: p.x + vx * dt, y: p.y + vy * dt };
     }
-    // バネのゆきすぎで、避けるものに重ならないように、最後にもう一度押し出す
+    // 案内役が遠くへ行っても、本体を置いていかない: しっぽの先と本体の輪郭の距離が leash を超えたぶんは、本体を寄せる
+    // （しっぽが細長く伸びきるのを防ぐ。t の関数なので、同じ t なら同じ位置）
     const sf = segState(ctx, t);
+    const rr0 = Math.min(C.radius, sf.h / 2);
+    const nn = nearestOnOutline({ x: p.x, y: p.y, w: sf.w, h: sf.h }, rr0, C.anchorAt(t));
+    if (nn.d > C.leash) { p = { x: p.x + nn.nx * (nn.d - C.leash), y: p.y + nn.ny * (nn.d - C.leash) }; }
+    // バネのゆきすぎで、避けるものに重ならないように、最後にもう一度押し出す
     return resolve(p.x, p.y, sf.w, sf.h, t);
   }
 
+  // しっぽ: 本体の輪郭のうち、先にいちばん近い点から、先へ向かって伸びる。
+  // 先がどこにあっても（下・横・斜め）、根もとは輪郭に沿って付き、軸は先を向くので、つぶれた細い三角にならない。
+  // 先が本体の中・すぐ近くにあるときは、根もとを細くして消える（連続的に）。
   function drawTail(ctx, box, tip) {
-    const { x, y, w, h } = box;
-    const r = Math.min(C.radius, h / 2), tw = C.tailW;
-    // 本体のどの辺に付けるか
-    let edge;
-    if (tip.y >= y + h) edge = 'b';
-    else if (tip.y <= y) edge = 't';
-    else if (tip.x <= x) edge = 'l';
-    else edge = 'r';
-    // path は呼び出し側で beginPath 済み（本体と同じ path に、しっぽを足す）
-    if (edge === 'b' || edge === 't') {
-      const by = edge === 'b' ? y + h : y;
-      const bx = clamp(tip.x, x + r + tw / 2, x + w - r - tw / 2);
-      const k = edge === 'b' ? 1 : -1;
-      const inset = 3 * k;
-      ctx.moveTo(bx - tw / 2, by - inset);
-      ctx.quadraticCurveTo(bx - tw * 0.1 + (tip.x - bx) * 0.25, by + (tip.y - by) * 0.62, tip.x, tip.y);
-      ctx.quadraticCurveTo(bx + tw * 0.25 + (tip.x - bx) * 0.4, by + (tip.y - by) * 0.42, bx + tw / 2, by - inset);
-      ctx.closePath();
-    } else {
-      const bx = edge === 'r' ? x + w : x;
-      const by = clamp(tip.y, y + r + tw / 2, y + h - r - tw / 2);
-      const k = edge === 'r' ? 1 : -1;
-      const inset = 3 * k;
-      ctx.moveTo(bx - inset, by - tw / 2);
-      ctx.quadraticCurveTo(bx + (tip.x - bx) * 0.62, by - tw * 0.1 + (tip.y - by) * 0.25, tip.x, tip.y);
-      ctx.quadraticCurveTo(bx + (tip.x - bx) * 0.42, by + tw * 0.25 + (tip.y - by) * 0.4, bx - inset, by + tw / 2);
-      ctx.closePath();
-    }
+    const r = Math.min(C.radius, box.h / 2);
+    const P = nearestOnOutline(box, r, tip);
+    const L = P.d;
+    if (L <= 1) return;
+    const tw = C.tailW * Math.min(1, L / 36);
+    const tx = -P.ny, ty = P.nx;                       // 輪郭に沿う向き
+    const pa = nearestOnOutline(box, r, { x: P.x + tx * tw / 2, y: P.y + ty * tw / 2 }); // 根もと（下に付くとき左）
+    const pb = nearestOnOutline(box, r, { x: P.x - tx * tw / 2, y: P.y - ty * tw / 2 }); // 根もと（下に付くとき右）
+    const inset = 3;                                    // 本体に3px食い込ませる（塗りの継ぎ目を隠す）
+    const ax = pa.x - pa.nx * inset, ay = pa.y - pa.ny * inset;
+    const bx = pb.x - pb.nx * inset, by = pb.y - pb.ny * inset;
+    // 軸（根もとの中心から先）に沿って、左は0.62、右は0.42の所に制御点（右がわが少しふくらむ、すっとした形）
+    const ux = tip.x - P.x, uy = tip.y - P.y;
+    ctx.moveTo(ax, ay);
+    ctx.quadraticCurveTo(P.x + ux * 0.62 + tx * tw * 0.10, P.y + uy * 0.62 + ty * tw * 0.10, tip.x, tip.y);
+    ctx.quadraticCurveTo(P.x + ux * 0.42 - tx * tw * 0.25, P.y + uy * 0.42 - ty * tw * 0.25, bx, by);
+    ctx.closePath();
   }
 
   function drawText(ctx, lay, x, y, alpha) {

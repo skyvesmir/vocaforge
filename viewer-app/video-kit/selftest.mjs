@@ -27,7 +27,7 @@ try {
     if (!light(px(box.x + box.w * 0.5, box.y + box.h * 0.08))) errs.push('本体が塗られていない');
     // しっぽの付け根（本体の下の端から2px上。しっぽは本体に3px食い込んでいる）の3か所: ふちの線が透けていたら暗い
     // （本体としっぽを1つの path で塗る不具合が入ると、ここが穴になって青い線が出る）
-    const bx = Math.min(Math.max(tip.x, box.x + 44 + 27), box.x + box.w - 44 - 27);
+    const bx = Math.min(Math.max(tip.x, box.x + 44), box.x + box.w - 44);
     if (tip.y < box.y + box.h) errs.push('しっぽが本体の下に付かない（テストの前提が崩れた）');
     else if (![-18, 0, 18].every((dx) => light(px(bx + dx, box.y + box.h - 2)))) errs.push('しっぽの付け根にふちの線が透けている');
     let dark = 0; // 文字（紺か朱）の画素数
