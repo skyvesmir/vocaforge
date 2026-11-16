@@ -177,6 +177,16 @@ node scripts/make-faces.mjs assets/guide-originals assets/guide-faces 2>&1 | tai
 NFA=$(ls assets/guide-faces/*.png 2>/dev/null | wc -l)
 say "$([ "$NFA" -ge 2 ] && echo OK || echo NG) 丸い表情アイコン: assets/guide-faces/ に ${NFA}枚（face-open.png=説明中、face-smile.png=間・うなずき。512×512、角は透明。顔・耳・手が円に収まっている）"
 
+# 5c. 案内役の全身の切り抜きと、吹き出し部品（video-kit）。切り抜きは、白地の原画から背景だけを透明にする（絵は描き直さない）
+step "全身の切り抜きと吹き出し部品"
+mkdir -p video-kit scripts
+cp -r "$HERE/video-kit/." video-kit/
+cp "$HERE/scripts/make-cutouts.mjs" "$HERE/scripts/guide-heads.json" scripts/ 2>/dev/null
+node scripts/make-cutouts.mjs assets/guide-originals assets/guide-cut 2>&1 | tail -6
+NCU=$(ls assets/guide-cut/guide-stage*.png 2>/dev/null | wc -l)
+OPQ=$(node -e 'const m=require("./assets/guide-cut/manifest.json");const o=Object.values(m.images).map(i=>i.opaque_ratio);console.log(o.every(v=>v>0.3&&v<0.8)?"ok":"ng "+o.join(","))' 2>/dev/null)
+say "$([ "$NCU" -ge 5 ] && [ "$OPQ" = ok ] && echo OK || echo NG) 全身の切り抜き: assets/guide-cut/ に ${NCU}枚（guide-stage1〜5.png。背景は透明、原画と同じ大きさ。manifest.json に外接矩形と頭の位置）。自分で切り抜き直さない"
+
 # 6. ビルドの確認
 step "ビルドの確認"
 DATABASE_URL="${DATABASE_URL:-postgres://u:p@127.0.0.1:5432/x}" npx next build > build.log 2>&1
@@ -211,10 +221,15 @@ CF=$(node -e 'import("./fonts/register.mjs").then(async()=>{const {GlobalFonts,c
 NF=$(ls fonts/*.ttf 2>/dev/null | wc -l)
 say "$([ "$NF" -ge 8 ] && echo "$CF" | grep -q '丸ゴ=[0-9]' && echo "$CF" | grep -q 'ノト=[0-9]' && echo OK || echo NG) 日本語フォント: fonts/ に Zen Maru Gothic（丸み・主役）と Noto Sans JP（小さな文字・予備）を各4種（${NF}ファイル）。fonts/register.mjs を import すると使える（描画ピクセル数 ${CF:-確認失敗}）。出典は CREDITS.md に「Zen Maru Gothic・Noto Sans JP（SIL OFL 1.1）」と書く"
 
+# 7b. 吹き出し部品の自己テスト（フォントの後。1コマ描いて、本体・しっぽの付け根・文字・余白を確かめる）
+step "吹き出し部品の自己テスト"
+ST=$(node video-kit/selftest.mjs 2>&1 | tail -1)
+say "$(echo "$ST" | grep -q '^OK' && echo OK || echo NG) 吹き出し部品: video-kit/bubble.mjs（${ST#* }）。使い方は video-kit/README.md、見本は video-kit/bubble-demo.mjs。動画の吹き出しは、これを呼んで作る（自作しない）"
+
 # 8. 掃除と締め
 rm -rf _v 2>/dev/null
 say ""
-say "置いたもの: intro-music/  assets/（screens・guide・guide-originals・guide-faces）  sfx/  earshot/  fonts/  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
+say "置いたもの: intro-music/  assets/（screens・guide・guide-originals・guide-faces・guide-cut）  video-kit/（吹き出し部品）  sfx/  earshot/  fonts/  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
 say "※ビューアの画面表示・動画再生は、ここでは確認していない。"
 say "完了（経過 $(el)）"
 touch .setup.done
