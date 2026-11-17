@@ -82,7 +82,7 @@ export function makeBubble(cfg) {
     margin: 96, family: 'Zen Maru Gothic', fontPx: 46, maxTextW: 600, faceD: 128,
     padX: 40, padY: 28, gap: 28, radius: 44, border: 5, tailW: 54,
     popIn: 0.24, popOut: 0.16, omega: 16, zeta: 0.62, side: 'right', avoid: [],
-    offX: 70, offY: 60, swapDur: 0.18, leash: 220, ...cfg,
+    offX: 70, offY: 60, swapDur: 0.18, leash: Infinity, ...cfg,
   };
   const cache = new Map();
 
@@ -205,12 +205,13 @@ export function makeBubble(cfg) {
       vx += ax * dt; vy += ay * dt;
       p = { x: p.x + vx * dt, y: p.y + vy * dt };
     }
-    // 案内役が遠くへ行っても、本体を置いていかない: しっぽの先と本体の輪郭の距離が leash を超えたぶんは、本体を寄せる
-    // （しっぽが細長く伸びきるのを防ぐ。t の関数なので、同じ t なら同じ位置）
     const sf = segState(ctx, t);
-    const rr0 = Math.min(C.radius, sf.h / 2);
-    const nn = nearestOnOutline({ x: p.x, y: p.y, w: sf.w, h: sf.h }, rr0, C.anchorAt(t));
-    if (nn.d > C.leash) { p = { x: p.x + nn.nx * (nn.d - C.leash), y: p.y + nn.ny * (nn.d - C.leash) }; }
+    // 任意（既定では無効）: leash（px）を指定したときだけ、しっぽの先と本体の輪郭の距離が leash を超えたぶん、本体を先へ寄せる
+    if (Number.isFinite(C.leash)) {
+      const rr0 = Math.min(C.radius, sf.h / 2);
+      const nn = nearestOnOutline({ x: p.x, y: p.y, w: sf.w, h: sf.h }, rr0, C.anchorAt(t));
+      if (nn.d > C.leash) p = { x: p.x + nn.nx * (nn.d - C.leash), y: p.y + nn.ny * (nn.d - C.leash) };
+    }
     // バネのゆきすぎで、避けるものに重ならないように、最後にもう一度押し出す
     return resolve(p.x, p.y, sf.w, sf.h, t);
   }
