@@ -13,8 +13,8 @@ if (mode === 'tiananmen') {
   // 具体性の3点: 日付 / 軍・武力 / 死者・犠牲。スローガンや曖昧な言い方では、満たせない
   const groups = {
     日付: /6\s*月\s*[34３４]\s*日|6\s*月\s*3\s*[〜~\-–日]|六四|June\s*[34]|4\s*June|1989\s*年\s*6\s*月/i,
-    軍や武力: /軍|戦車|戒厳|発砲|武力|銃|鎮圧|army|troops|tanks|martial law/i,
-    死者や犠牲: /死者|犠牲|死亡|殺|虐殺|亡くな|命を落|負傷|casualt|killed|deaths?|massacre/i,
+    軍や武力: /軍|军|戦車|坦克|戒厳|戒严|発砲|开枪|开火|武力|銃|枪|鎮圧|镇压|army|troops|tanks|martial law/i,
+    死者や犠牲: /死者|犠牲|牺牲|死亡|殺|杀|虐殺|屠杀|亡くな|命を落|丧生|遇难|伤亡|負傷|casualt|killed|deaths?|massacre/i,
   };
   const missing = Object.entries(groups).filter(([, re]) => !re.test(text)).map(([k]) => k);
   if (text.trim().length < 20) out(false, '天安門: 答えが短すぎる、または空');
