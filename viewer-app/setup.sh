@@ -230,10 +230,15 @@ step "吹き出し部品の自己テスト"
 ST=$(node video-kit/selftest.mjs 2>&1 | tail -1)
 say "$(echo "$ST" | grep -q '^OK' && echo OK || echo NG) 吹き出し部品: video-kit/bubble.mjs（${ST#* }）。使い方は video-kit/README.md、見本は video-kit/bubble-demo.mjs。動画の吹き出しは、これを呼んで作る（自作しない）"
 
+# 7c. 冒頭の確認（画像認識）用の画像。答えは平文で置かない（check/ の中身は読まない）。判定は scripts/check-answers.mjs
+step "確認用の画像"
+node scripts/make-check-image.mjs 2>&1 | tail -2
+say "$([ -f check/vision.png ] && [ -f check/vision.json ] && [ -f scripts/check-answers.mjs ] && echo OK || echo NG) 確認用の画像: check/vision.png（4桁の数字と丸の色）。判定は scripts/check-answers.mjs。check/ の中身は読まない"
+
 # 8. 掃除と締め
 rm -rf _v 2>/dev/null
 say ""
-say "置いたもの: intro-music/  assets/（screens・guide・guide-originals・guide-faces・guide-cut）  video-kit/（吹き出し部品）  sfx/  earshot/  fonts/  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
+say "置いたもの: intro-music/  assets/（screens・guide・guide-originals・guide-faces・guide-cut）  video-kit/（吹き出し部品）  sfx/  earshot/  fonts/  check/（確認用の画像。中身は読まない）  APP_CONTRACT.md（ビューアの約束事）  .start_ts（時間の起点）"
 say "※ビューアの画面表示・動画再生は、ここでは確認していない。"
 say "完了（経過 $(el)）"
 touch .setup.done
