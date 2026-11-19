@@ -81,7 +81,7 @@ export function makeBubble(cfg) {
   const C = {
     margin: 96, family: 'Zen Maru Gothic', fontPx: 46, maxTextW: 600, faceD: 128,
     padX: 40, padY: 28, gap: 28, radius: 44, border: 5, tailW: 54,
-    popIn: 0.24, popOut: 0.16, omega: 16, zeta: 0.62, side: 'right', avoid: [],
+    popIn: 0.24, popOut: 0.16, omega: 16, zeta: 0.8, side: 'right', avoid: [],
     offX: 70, offY: 60, swapDur: 0.18, leash: Infinity, ...cfg,
   };
   const cache = new Map();
