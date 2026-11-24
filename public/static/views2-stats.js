@@ -11,6 +11,7 @@
       VF.deckCards('phrases').map(c => c.id),
       VF.deckCards('etym').map(c => c.id));
     const st = Store.stats(allIds);
+    if (window.VFStudyTime && window.VFStudyTime.flush) window.VFStudyTime.flush();   // 数えている分を先に保存
     const hist = Store.getDailyHistory();
 
     // ====== 弱点単語一覧 ======
@@ -119,6 +120,17 @@
       days.push({ key, label: (d.getMonth()+1) + '/' + d.getDate(), n: rec.new + rec.review });
     }
     const max = Math.max(1, ...days.map(d => d.n));
+    // 勉強時間（直近14日）。日次記録の studyMs（分で表示）
+    const fmtDur = (window.VFStudyTime && window.VFStudyTime.fmtDur) || (ms => Math.round(ms / 60000) + '分');
+    const studyDays = days.map(d => ({ label: d.label, ms: ((hist[d.key] || {}).studyMs) || 0 }));
+    const studyMax = Math.max(60000, ...studyDays.map(d => d.ms));
+    const studyBars = studyDays.map(d =>
+      '<div class="flex flex-col items-center gap-1 flex-1">' +
+      '<div class="w-full flex items-end justify-center" style="height:90px">' +
+        '<div class="w-3/4 rounded-t ' + (d.ms ? 'bg-emerald-500' : 'bg-slate-800') + '" style="height:' + Math.max(4, d.ms / studyMax * 90) + 'px" title="' + fmtDur(d.ms) + '"></div>' +
+      '</div><span class="text-[8px] text-slate-500">' + d.label + '</span></div>').join('');
+    const studyToday = studyDays[studyDays.length - 1].ms;
+    const studyWeek = studyDays.slice(-7).reduce((a, d) => a + d.ms, 0);
     const bars = days.map(d =>
       '<div class="flex flex-col items-center gap-1 flex-1">' +
       '<div class="w-full flex items-end justify-center" style="height:90px">' +
@@ -147,6 +159,13 @@
 
       '<h2 class="text-sm font-bold text-slate-300 mb-2">学習量（直近14日）</h2>' +
       '<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 mb-4"><div class="flex gap-0.5">' + bars + '</div></div>' +
+
+      '<h2 class="text-sm font-bold text-slate-300 mb-2">勉強時間（直近14日）</h2>' +
+      '<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 mb-4">' +
+        '<div class="flex justify-between text-xs mb-2"><span class="text-slate-400">今日 <b class="text-slate-100">' + fmtDur(studyToday) + '</b></span>' +
+        '<span class="text-slate-400">直近7日 <b class="text-slate-100">' + fmtDur(studyWeek) + '</b></span></div>' +
+        '<div class="flex gap-0.5">' + studyBars + '</div>' +
+        '<div class="text-[10px] text-slate-500 mt-2">カードを解いている・めくっている間だけを数えます（30秒操作がないと止まります）。</div></div>' +
 
       '<h2 class="text-sm font-bold text-slate-300 mb-2">記憶ステージ</h2>' +
       '<div class="grid grid-cols-2 gap-2 mb-4">' +

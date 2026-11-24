@@ -116,6 +116,7 @@ app.get('/', (c) => {
   <script src="/static/flashcard.js"></script>
   <script src="/static/outbox.js"></script>
   <script src="/static/cloud-sync.js"></script>
+  <script src="/static/study-timer.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>`)

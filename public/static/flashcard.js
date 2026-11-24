@@ -271,6 +271,7 @@
   }
 
   function cleanupKey() { if (FC._key) document.removeEventListener('keydown', FC._key); }
+  window.__flashCleanup = cleanupKey;   // study-timer.js の「今日はここまで」用
 
   function exit() { cleanupKey(); openPicker(FC.deck); }
 

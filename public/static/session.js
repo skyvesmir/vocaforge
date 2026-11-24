@@ -692,4 +692,10 @@
 
   // session-answer.js の applyGrade から呼ばれる
   ns.nextCard = nextCard;
+  // 確認なしでセッションを抜けてホームへ戻る（study-timer.js の「今日はここまで」用。進捗は解答ごとに保存済み）
+  ns.leave = function () {
+    const s = VF.STATE.session;
+    if (s && s._keyHandler) document.removeEventListener('keydown', s._keyHandler);
+    VF.go('home');
+  };
 })();
