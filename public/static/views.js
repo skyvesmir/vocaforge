@@ -20,6 +20,7 @@
   }
 
   window.renderHome = function () {
+    if (window.VFStudyTime && window.VFStudyTime.flush) window.VFStudyTime.flush();   // 数えている分を先に保存
     const m = VF.DATA.meta;
     const allIds = [].concat(
       VF.deckCards('words').map(c => c.id),
@@ -88,6 +89,16 @@
         miniStat('定着(成熟)', st.nMature, 'fa-seedling') +
         miniStat('保持率', st.retention == null ? '—' : st.retention + '%', 'fa-bullseye') +
       '</div>' +
+
+      // 勉強時間（解いている間だけ自動で数える。study-timer.js）
+      (function () {
+        const T = window.VFStudyTime;
+        if (!T || !T.today) return '';
+        return '<div class="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 mb-5 text-sm">' +
+          '<span class="text-slate-400"><i class="fas fa-clock mr-2 text-slate-500"></i>勉強時間</span>' +
+          '<span>今日 <b>' + T.fmtDur(T.today()) + '</b><span class="text-slate-600 mx-2">/</span>' +
+          '<span class="text-slate-400">直近7日 ' + T.fmtDur(T.recent(7)) + '</span></span></div>';
+      })() +
 
       // 成長するカロ（学習済みの語数で姿が変わる。karo.js）
       (window.VFKaro ? window.VFKaro.growthHtml(st.learned) : '') +

@@ -36,10 +36,15 @@
   // 旧版の answered / correct / typedAnswered / typedCorrect / sessions /
   // sessions80 / relearned は廃止項目なので復活させない
   // （「解答回数」系の数字は報酬計算に一切使わない方針）。
+  // 例外: studyMs（勉強時間）は、既存の日次同期にそのまま乗せるために後から1項目だけ足した
+  // （2026-11 勉強時間計測）。報酬計算には使わない。
   const DAILY_SHAPE = {
     // ── 既存（そのまま）
     new: 0,              // 新規に開いた枚数
     review: 0,           // 復習した枚数
+
+    // ── 勉強時間（study-timer.js が書く。その日の累計ミリ秒）
+    studyMs: 0,
 
     // ── 期限カード（ミッション 1・2・3・4・5・8 と報酬計算の中核）
     dueTotal: 0,         // その日の期限カード総数。その日の最初に確定させ、以後変えない
@@ -83,6 +88,7 @@
     const out = {
       new: num(src.new),
       review: num(src.review),
+      studyMs: Math.max(0, num(src.studyMs)),
       dueTotal: num(src.dueTotal),
       dueDone: num(src.dueDone),
       dueCorrect: num(src.dueCorrect),
@@ -125,7 +131,7 @@
   function mergeDailyRec(aRaw, bRaw) {
     const a = normalizeDaily(aRaw), b = normalizeDaily(bRaw);
     const out = {};
-    ['new', 'review', 'dueTotal', 'dueDone', 'dueCorrect',
+    ['new', 'review', 'studyMs', 'dueTotal', 'dueDone', 'dueCorrect',
       'newFirstPassed', 'weakTotal', 'weakDone'].forEach(k => {
       out[k] = Math.max(a[k], b[k]);
     });
@@ -194,7 +200,8 @@
     leechThreshold: 8,     // 旧設定（間違い回数での判定用）。現在は未使用。リーチは FSRS.isLeech() で判定する
     sectionNewLimit: 50, // セクション明示選択時の1回あたり新規カード数（下限10）
     wordDataset: 'target1900', // 単語DB: 'target1900'(1900語) | 'full'(発音/品詞/例文付き) | 'leap'
-    phraseDataset: 'target1000' // 熟語DB: 'target1000'(1000熟語) | 'full'(2606熟語・補足/例文付き)
+    phraseDataset: 'target1000', // 熟語DB: 'target1000'(1000熟語) | 'full'(2606熟語・補足/例文付き)
+    studyTimeAskOnReturn: false // 勉強時間: 20秒以上離れて戻ったとき「再開」ウィンドウを出すか。既定は出さない（離れた時間は数えず、そのまま再開）
   };
 
   function load(key, fallback) {
@@ -569,6 +576,24 @@
       });
       if (changed) save(K.daily, all);
       return changed;
+    },
+
+    // ---- 勉強時間（日次記録の studyMs）----
+    // 加算だけを行う。同期の合体は mergeDailyRec で「大きい方」（その日の累計スナップショット）。
+    addStudyMs(ms, now) {
+      const add = (typeof ms === 'number' && isFinite(ms)) ? Math.round(ms) : 0;
+      if (add <= 0) return this.getDaily(now);
+      return this.updateDaily(now, rec => { rec.studyMs += add; });
+    },
+    getStudyMs(now) { return this.getDaily(now).studyMs; },
+    // now を含む直近 days 日（既定7日）の合計ミリ秒
+    getStudyMsRecent(days, now) {
+      const n = (typeof days === 'number' && days > 0) ? Math.floor(days) : 7;
+      const base = (typeof now === 'number' && isFinite(now)) ? now : Date.now();
+      const all = load(K.daily, {});
+      let sum = 0;
+      for (let i = 0; i < n; i++) sum += normalizeDaily(all[todayStr(base - i * 86400000)]).studyMs;
+      return sum;
     },
 
     // ---- ゲーム版で使う枠（学習版では常に 0。UIには出さない）----

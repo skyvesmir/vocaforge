@@ -230,6 +230,8 @@
         toggle('interleave', 'インターリービング', s.interleave, 'カテゴリを混ぜて出題（交互練習で識別力↑）') +
         toggle('onScreenKeyboard', '画面キーボードで入力', s.onScreenKeyboard !== false,
           '記入式でOSのキーボードを出さず、アプリ内のキーボードで入力します（画面が上下に動きません）。スマホ・タブレット用で、PCでは常に通常の入力欄です') +
+        toggle('studyTimeAskOnReturn', '離れて戻ったとき「再開」を確認する', s.studyTimeAskOnReturn === true,
+          '勉強時間は自動で数え、画面を離れると止まります。ONにすると、20秒以上離れて戻ったとき「再開する／離れている間も勉強していた（最大30分を足す）／今日はここまで」を選べます。OFFのときは何も聞かず、離れていた間は数えずにそのまま再開します') +
       '</div>' +
       kbHtml +
 
