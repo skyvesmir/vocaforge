@@ -94,13 +94,26 @@
     return variants;
   }
 
+  // 「/」が複数語どうしの言い換えを表す熟語。expandSlashes は「/」を語1つずつの言い換えとして読むので、
+  // これらは正しく展開できない（"as ～ as possible/one can" が "as ～ as possible can" になるなど）。
+  // 許容形を直接書いておく。表示する見出し語（データ）は変えない。
+  const MULTIWORD_ALTS = {
+    'as ～ as possible/one can': ['as ～ as possible', 'as ～ as one can'],
+    'at all cost(s)/any cost': ['at all cost(s)', 'at any cost'],
+    "of one's own accord/free will": ["of one's own accord", "of one's own free will"],
+    'in order/so as to do': ['in order to do', 'so as to do']
+  };
+
   // 英語の許容解答リストを作る（熟語の「(～)」「(s)」「A/B/C」等を考慮）
   function acceptableAnswers(term) {
     const base = (term || '').trim();
     const set = new Set([base]);
-    for (const p of expandParens(base)) {
-      for (const v of expandSlashes(p)) {
-        set.add(v);
+    for (const b of (MULTIWORD_ALTS[base] || [base])) {
+      for (const p of expandParens(b)) {
+        for (const v of expandSlashes(p)) {
+          set.add(v);
+          if (set.size >= MAX_VARIANTS) break;
+        }
         if (set.size >= MAX_VARIANTS) break;
       }
       if (set.size >= MAX_VARIANTS) break;
