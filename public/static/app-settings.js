@@ -15,6 +15,12 @@
   function bindAccount() { return ns.bindAccount.apply(null, arguments); }
 
   function bindSettings() {
+    // 見出しの開閉を覚える（この端末だけ）
+    document.querySelectorAll('details[data-sec]').forEach(d => {
+      d.addEventListener('toggle', () => {
+        if (window.__setSettingsOpen) window.__setSettingsOpen(d.getAttribute('data-sec'), d.open);
+      });
+    });
     // 外観テーマ切替
     document.querySelectorAll('[data-theme]').forEach(b => {
       b.onclick = () => {

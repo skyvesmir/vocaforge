@@ -26,8 +26,24 @@
       '<i class="fas ' + icon + '"></i><span>' + text + '</span></div>';
   }
 
+  // ---- 見出しごとの開閉（この端末だけに保存。クラウドには同期しない）----
+  const SEC_KEY = 'vocaforge:settingsOpen';
+  function secState() {
+    try { return JSON.parse(localStorage.getItem(SEC_KEY)) || {}; } catch (e) { return {}; }
+  }
+  window.__setSettingsOpen = function (id, open) {
+    const st = secState(); st[id] = !!open;
+    try { localStorage.setItem(SEC_KEY, JSON.stringify(st)); } catch (e) { /* 保存できなくても動く */ }
+  };
+
   window.renderSettings = function () {
     const s = Store.getSettings();
+    // 開閉できる見出し。保存された開閉があればそれを使い、なければ既定（defOpen）
+    const openMap = secState();
+    const sec = (id, title, body, defOpen) => !body ? '' :
+      '<details class="set-sec" data-sec="' + id + '"' + ((id in openMap ? openMap[id] : defOpen) ? ' open' : '') + '>' +
+      '<summary class="set-sec-sum"><span>' + title + '</span><i class="fas fa-chevron-down set-sec-chev" aria-hidden="true"></i></summary>' +
+      body + '</details>';
     const toggle = (id, label, checked, desc) =>
       '<label class="flex items-center justify-between py-3 cursor-pointer">' +
       '<span><span class="text-sm font-medium">' + label + '</span>' +
@@ -133,7 +149,6 @@
         '<button data-kb-align="' + v + '" class="flex-1 py-2 rounded-xl border text-xs transition ' +
         (kp.align === v ? 'bg-brand/15 border-brand/50 text-brand font-bold' : 'bg-slate-800 border-transparent text-slate-300') + '">' + label + '</button>';
       kbHtml =
-        '<h2 class="text-sm font-bold text-slate-300 mb-2">画面キーボードの寸法</h2>' +
         '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
           '<div class="py-3"><p class="text-[11px] text-slate-500 leading-relaxed">押しやすい大きさは、端末や手の大きさ、持ち方で変わります。下の試し打ちで、親指で押してみながら合わせてください。この設定はこの端末だけに保存され、他の端末には同期されません。</p></div>' +
           '<div class="kb-sticky py-3"><div class="text-xs text-slate-400 mb-2">試し打ち（スライダーを動かすと、ここがすぐ変わります）</div>' +
@@ -153,13 +168,9 @@
     return '<div class="max-w-xl mx-auto pb-24 px-4 pt-6">' +
       '<h1 class="text-xl font-extrabold mb-4">設定</h1>' +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">外観</h2>' +
-      themeHtml +
-      runesHtml +
-      karoHtml +
+      sec('appearance', '外観', themeHtml + runesHtml + karoHtml, true) +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">単語データベース</h2>' +
-      (function () {
+      sec('words-db', '単語データベース', (function () {
         const ds = s.wordDataset || 'target1900';
         const opt = (mode, title, desc, count) =>
           '<button data-dataset="' + mode + '" class="w-full flex items-center gap-3 p-3 rounded-xl border text-left transition ' +
@@ -175,10 +186,9 @@
           opt('leap', 'Leap', 'Leap収録語の並び・全23セクション（発音・品詞・例文つき）', '2297語') +
           '<p class="text-[11px] text-slate-500 leading-relaxed px-1">同じ単語の学習進捗はすべてのバージョンで共有されます。切替はいつでも可能です。</p>' +
         '</div>';
-      })() +
+      })(), false) +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">熟語データベース</h2>' +
-      (function () {
+      sec('phrases-db', '熟語データベース', (function () {
         const ds = s.phraseDataset || 'target1000';
         const opt = (mode, title, desc, count) =>
           '<button data-phrase-dataset="' + mode + '" class="w-full flex items-center gap-3 p-3 rounded-xl border text-left transition ' +
@@ -193,12 +203,11 @@
           opt('full', '全部バージョン', '新データベース全収録／意味カテゴリ別 全47セクション（補足・例文つき）', '2606熟語') +
           '<p class="text-[11px] text-slate-500 leading-relaxed px-1">同じ熟語の学習進捗は両バージョンで共有されます。切替はいつでも可能です。</p>' +
         '</div>';
-      })() +
+      })(), false) +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">アカウント</h2>' +
-      accountHtml +
+      sec('account', 'アカウント', accountHtml, true) +
 
-      '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
+      sec('load', '学習量', '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
         '<div class="py-3"><div class="text-sm font-medium mb-2">目標保持率 <span class="text-brand font-bold" id="rr-val">' + Math.round(s.requestRetention*100) + '%</span></div>' +
           '<input type="range" min="80" max="97" value="' + Math.round(s.requestRetention*100) + '" data-set="requestRetention" class="w-full accent-indigo-500">' +
           '<div class="text-xs text-slate-400 mt-1">高いほど復習頻度↑・記憶確実。低いほど効率重視。推奨90%。</div></div>' +
@@ -215,28 +224,25 @@
         '<div class="py-3"><div class="text-sm font-medium mb-2">セクション学習の新規カード数 <span class="text-brand font-bold" id="snl-val">' + (s.sectionNewLimit || 50) + '</span></div>' +
           '<input type="range" min="10" max="100" step="5" value="' + (s.sectionNewLimit || 50) + '" data-set="sectionNewLimit" class="w-full accent-indigo-500">' +
           '<div class="text-xs text-slate-400 mt-1">セクションを選んで学習するときの1回あたりの新規カード数（下限10）。</div></div>' +
-      '</div>' +
+      '</div>', true) +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">出題形式</h2>' +
-      '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
+      sec('formats', '出題形式', '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
         toggle('fmt-mc-ej', '選択：英 → 日', s.formats['mc-ej'], '英語を見て意味を選ぶ（認識）※新規カード用') +
         toggle('fmt-mc-je', '選択：日 → 英', s.formats['mc-je'], '日本語を見て英語を選ぶ ※新規カード用') +
         toggle('fmt-cloze', '記入：例文穴埋め', s.formats['cloze'] !== false, '例文の空欄に入る語をタイプ（文脈想起）※復習カードの一部に出題') +
         '<div class="py-3"><p class="text-[11px] text-slate-500 leading-relaxed">未学習カードは上記の選択式から出題され、復習カードは記入式（日本語→英語タイプ／例文穴埋め）で出題されます（能動的想起の強制）。</p></div>' +
-      '</div>' +
+      '</div>', true) +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">学習動作</h2>' +
-      '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
+      sec('behavior', '学習動作', '<div class="bg-slate-900 border border-slate-800 rounded-xl px-4 mb-4 divide-y divide-slate-800">' +
         toggle('interleave', 'インターリービング', s.interleave, 'カテゴリを混ぜて出題（交互練習で識別力↑）') +
         toggle('onScreenKeyboard', '画面キーボードで入力', s.onScreenKeyboard !== false,
           '記入式でOSのキーボードを出さず、アプリ内のキーボードで入力します（画面が上下に動きません）。スマホ・タブレット用で、PCでは常に通常の入力欄です') +
         toggle('studyTimeAskOnReturn', '離れて戻ったとき「再開」を確認する', s.studyTimeAskOnReturn === true,
           '勉強時間は自動で数え、画面を離れると止まります。ONにすると、20秒以上離れて戻ったとき「再開する／離れている間も勉強していた（最大30分を足す）／今日はここまで」を選べます。OFFのときは何も聞かず、離れていた間は数えずにそのまま再開します') +
-      '</div>' +
-      kbHtml +
+      '</div>', true) +
+      sec('keyboard', '画面キーボードの寸法', kbHtml, false) +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">アルゴリズムの個人最適化</h2>' +
-      (function () {
+      sec('fsrs-opt', 'アルゴリズムの個人最適化', (function () {
         var st = window.FSRSOpt ? FSRSOpt.status() : null;
         if (!st) return '';
         var body;
@@ -257,17 +263,16 @@
             '<i class="fas fa-wand-magic-sparkles mr-2"></i>' + (st.active ? '再最適化する' : 'いますぐ最適化する') + '</button>' +
           (st.active ? '<button id="fsrs-opt-reset" class="w-full mt-2 text-slate-400 text-xs font-bold py-2">デフォルトパラメータに戻す</button>' : '') +
         '</div>';
-      })() +
+      })(), false) +
 
-      '<h2 class="text-sm font-bold text-slate-300 mb-2">データの管理</h2>' +
-      '<div class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">' +
+      sec('data', 'データの管理', '<div class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-4">' +
         '<p class="text-xs text-slate-400 mb-3 leading-relaxed">学習の進捗・記憶状態・統計をファイルに保存（エクスポート）し、別の端末やブラウザに引き継げます（インポート）。</p>' +
         '<button id="export-btn" class="w-full bg-brand/10 text-brand border border-brand/30 rounded-xl py-3 text-sm font-bold mb-2">' +
           '<i class="fas fa-file-export mr-2"></i>学習データをエクスポート</button>' +
         '<button id="import-btn" class="w-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 rounded-xl py-3 text-sm font-bold">' +
           '<i class="fas fa-file-import mr-2"></i>学習データをインポート</button>' +
         '<input type="file" id="import-file" accept="application/json,.json" class="hidden">' +
-      '</div>' +
+      '</div>', false) +
 
       '<button id="reset-btn" class="w-full bg-rose-500/10 text-rose-300 border border-rose-500/30 rounded-xl py-3 text-sm font-bold mb-3">' +
         '<i class="fas fa-trash mr-2"></i>学習データをすべてリセット</button>' +
