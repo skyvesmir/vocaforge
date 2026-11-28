@@ -63,7 +63,7 @@
         '<div class="flex items-center justify-between">' +
           '<div><div class="text-sm opacity-90">今日の学習</div>' +
           '<div class="text-3xl font-extrabold">復習 ' + todayDue + ' 件</div>' +
-          '<div class="text-xs opacity-80 mt-1">' +
+          '<div class="text-xs opacity-90 mt-1">' +
             (totalDue === 0 ? '復習は完了。新規学習を始めましょう'
               : todayDue === 0 ? '今日の復習の上限（' + reviewCap + '件）に達しました。残り ' + carryDue + ' 件は明日以降に回ります'
               : 'まず復習から。終わると新規学習が解禁されます' + (carryDue > 0 ? '（上限のため ' + carryDue + ' 件は明日以降）' : '')) + '</div></div>' +
@@ -107,12 +107,12 @@
       (function () {
         const n = window.__weakCount ? window.__weakCount() : 0;
         if (!n) return '';
-        return '<button data-go="session" data-deck="weak" class="w-full text-left bg-gradient-to-br from-rose-600/80 to-orange-600/80 rounded-2xl p-4 mb-5 border border-rose-500/40 active:scale-[0.99] transition">' +
+        return '<button data-go="session" data-deck="weak" class="w-full text-left bg-gradient-to-br from-rose-700/90 to-orange-700/90 rounded-2xl p-4 mb-5 border border-rose-500/40 active:scale-[0.99] transition">' +
           '<div class="flex items-center justify-between">' +
             '<div class="flex items-center gap-3">' +
               '<span class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center"><i class="fas fa-dumbbell text-lg"></i></span>' +
               '<div><div class="font-bold">弱点集中モード</div>' +
-              '<div class="text-xs opacity-80 mt-0.5">苦手カード ' + n + ' 語を集中ドリル（英→日のみ・最大15語/回）</div></div>' +
+              '<div class="text-xs mt-0.5">苦手カード ' + n + ' 語を集中ドリル（英→日のみ・最大15語/回）</div></div>' +
             '</div>' +
             '<i class="fas fa-chevron-right opacity-60"></i>' +
           '</div></button>';

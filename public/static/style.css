@@ -15,10 +15,11 @@ html, body { overscroll-behavior-y: none; }
   color-scheme: dark;
   --app-text: #f1f5f9;
   --text-strong: #f8fafc;
-  --text-sub: #cbd5e1;
-  --text-mut: #94a3b8;
-  --text-dim: #64748b;
-  --text-faint: #475569;
+  /* 補助文字の濃さ: ガラス面・チップの上でも 4.5:1 以上（WCAG AA）になるよう調整 */
+  --text-sub: #d6deea;
+  --text-mut: #b4c0d4;
+  --text-dim: #a3b1c6;
+  --text-faint: #94a3b8;
 
   /* スモークガラス: 中心は透過強め、blurで背景色を吸い込む */
   --glass-bg: rgba(23, 32, 51, 0.34);
@@ -48,9 +49,9 @@ html.light {
   --app-text: #1e293b;
   --text-strong: #0f172a;
   --text-sub: #334155;
-  --text-mut: #5b6b80;
-  --text-dim: #64748b;
-  --text-faint: #94a3b8;
+  --text-mut: #475569;
+  --text-dim: #4f5f75;
+  --text-faint: #586880;
 
   /* ミルキーガラス */
   --glass-bg: rgba(255, 255, 255, 0.42);
@@ -71,8 +72,9 @@ html.light {
   --track: rgba(15, 23, 42, 0.12);
   --overlay: rgba(15, 23, 42, 0.38);
 
-  --c-indigo: #4f46e5; --c-emerald: #047857; --c-amber: #b45309;
-  --c-sky: #0369a1;    --c-rose: #be123c;
+  /* 薄い色付きチップの上でも 4.5:1 を保てるよう、ライトの強調色は一段濃く */
+  --c-indigo: #4f46e5; --c-emerald: #065f46; --c-amber: #92400e;
+  --c-sky: #075985;    --c-rose: #9f1239;
 }
 
 /* ---------- 背景（有機的でカラフル = ガラスが色を吸って映える）---------- */
@@ -231,7 +233,7 @@ nav.fixed [data-nav]:active { transform: scale(0.85); transition-duration: .08s;
     0 14px 36px -10px var(--glass-shadow-ambient);
   overflow: hidden;
 }
-.bg-gradient-to-br .text-slate-400, .bg-gradient-to-r .text-slate-400 { color: rgba(255,255,255,.8) !important; }
+.bg-gradient-to-br .text-slate-400, .bg-gradient-to-r .text-slate-400 { color: rgba(255,255,255,.9) !important; }
 /* 表面をゆっくり流れる光（liquidな質感） */
 .bg-gradient-to-br::before, .bg-gradient-to-r::before {
   content: "";
@@ -542,3 +544,37 @@ summary.set-sec-sum:focus-visible { outline: 2px solid #6366f1; outline-offset: 
 .set-sec-chev { font-size: .75rem; color: var(--text-dim); transition: transform .2s; }
 details.set-sec:not([open]) .set-sec-chev { transform: rotate(-90deg); }
 @media (prefers-reduced-motion: reduce) { .set-sec-chev { transition: none; } }
+
+/* ============================================================
+   読みやすさ・押しやすさの底上げ（優先度1）
+   ============================================================ */
+
+/* 琥珀の面は白文字だと約2.2:1。濃い茶色の文字にして6:1以上にする */
+:root { --on-amber: #2b1500; }
+.bg-amber-500.text-white,
+.bg-gradient-to-r.from-amber-500,
+.bg-gradient-to-br.from-amber-500 { color: var(--on-amber) !important; }
+
+/* ナビの現在地・設定の選択中は、ダークでは明るいインディゴ・ライトでは濃いインディゴ（ロゴの色はそのまま） */
+nav.fixed .text-brand, details.set-sec .text-brand { color: var(--c-indigo) !important; }
+
+/* ライトのモーダル: 暗幕の上でガラスが灰色に濁らないよう、面をほぼ不透明の白にする */
+html.light #vf-modal > div,
+html.light #etym-modal > div,
+html.light #vf-karo-modal > div { background: rgba(255, 255, 255, 0.92) !important; }
+
+/* アイコンだけのボタン: 見た目の位置と余白は据え置きで、押せる範囲を44×44pxにする */
+.vf-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 44px; height: 44px; margin: -10px -14px;
+}
+.vf-iconbtn-end { margin-left: 0; }
+.vf-iconbtn:focus-visible { outline: 2px solid var(--c-indigo); outline-offset: -4px; border-radius: 14px; }
+[role="dialog"]:focus { outline: none; }
+
+/* ピンチ拡大は許可したまま、ダブルタップ拡大の待ち時間だけ無くす */
+button, a, summary, select, label, input[type="checkbox"] { touch-action: manipulation; }
+/* 拡大を許可すると、16px未満の入力欄でiOSがフォーカス時に勝手に拡大する。タッチ端末だけ16pxにそろえる */
+@media (pointer: coarse) {
+  input.text-sm, input.text-xs, select.text-sm, select.text-xs, textarea.text-sm { font-size: 16px !important; }
+}

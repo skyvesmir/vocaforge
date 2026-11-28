@@ -89,7 +89,7 @@
 
     return '<div class="max-w-xl mx-auto pb-24 px-4 pt-6">' +
       '<div class="flex items-center gap-3 mb-4">' +
-        '<button id="fc-back" class="text-slate-400 hover:text-white"><i class="fas fa-arrow-left text-lg"></i></button>' +
+        '<button id="fc-back" class="vf-iconbtn text-slate-400 hover:text-white" aria-label="戻る"><i class="fas fa-arrow-left text-lg" aria-hidden="true"></i></button>' +
         '<h1 class="text-xl font-extrabold"><i class="fas fa-clone text-amber-400 mr-1"></i>フラッシュカード</h1></div>' +
       '<p class="text-xs text-slate-400 mb-4">セクションを選ぶとカードをめくって学習できます。まず表で思い出してから裏を確認しましょう（能動的想起）。</p>' +
       '<div class="flex gap-2 overflow-x-auto pb-2 mb-3 no-scrollbar">' + tabBtn + '</div>' +
@@ -166,7 +166,7 @@
     const head =
       '<div class="sticky top-0 bg-slate-950/90 backdrop-blur z-10 px-4 pt-4 pb-2">' +
         '<div class="max-w-xl mx-auto flex items-center gap-3">' +
-          '<button id="fc-exit" class="text-slate-400 hover:text-white"><i class="fas fa-xmark text-xl"></i></button>' +
+          '<button id="fc-exit" class="vf-iconbtn text-slate-400 hover:text-white" aria-label="フラッシュカードをやめる"><i class="fas fa-xmark text-xl" aria-hidden="true"></i></button>' +
           '<div class="flex-1"><div class="text-xs text-slate-400">' + esc(currentLabel()) + '</div>' +
             '<div class="h-1.5 mt-1 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-amber-400 transition-all" style="width:' + Math.round((FC.idx+1)/total*100) + '%"></div></div></div>' +
           '<span class="text-xs text-slate-400 tabular-nums">' + (FC.idx+1) + '/' + total + '</span>' +
