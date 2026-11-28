@@ -114,7 +114,7 @@
     const head =
       '<div class="sticky top-0 bg-slate-950/90 backdrop-blur z-10 px-4 pt-4 pb-2">' +
         '<div class="max-w-xl mx-auto flex items-center gap-3">' +
-          '<button id="sess-quit" class="text-slate-400 hover:text-white"><i class="fas fa-xmark text-xl"></i></button>' +
+          '<button id="sess-quit" class="vf-iconbtn text-slate-400 hover:text-white" aria-label="出題をやめる"><i class="fas fa-xmark text-xl" aria-hidden="true"></i></button>' +
           '<div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-brand transition-all" style="width:' + progress + '%"></div></div>' +
           '<span class="text-xs text-slate-400 tabular-nums">' + Math.min(s.idx+1, s.total) + '/' + s.total + '</span>' +
         '</div></div>';
@@ -663,7 +663,7 @@
           '<div class="sticky top-0 bg-slate-900 px-5 py-4 border-b border-slate-800 flex items-center justify-between">' +
             '<div><span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">' + VF.catLabel(e.category) + '</span> ' +
             '<span class="font-extrabold text-lg ml-1">' + esc((e.variants||e.headword).replace(/`/g,'')) + '</span></div>' +
-            '<button id="close-modal" class="text-slate-400"><i class="fas fa-xmark text-xl"></i></button></div>' +
+            '<button id="close-modal" class="vf-iconbtn vf-iconbtn-end text-slate-400" aria-label="閉じる"><i class="fas fa-xmark text-xl" aria-hidden="true"></i></button></div>' +
           '<div class="px-5 py-4 space-y-3 text-sm">' +
             row('コアの意味', e.core) + row('派生的な意味', e.derived) + row('語源', e.origin) +
             (e.image_hint ? '<div class="bg-slate-800/50 rounded-xl p-3"><div class="text-xs text-slate-400 mb-1">イメージ</div>' + esc(e.image_hint) + '</div>' : '') +
@@ -671,8 +671,7 @@
             (e.tips ? row('覚え方', e.tips) : '') + (e.confusion ? row('混同注意', e.confusion) : '') +
           '</div></div></div>';
     document.body.insertAdjacentHTML('beforeend', html);
-    $('#close-modal').onclick = () => $('#etym-modal').remove();
-    $('#etym-modal').onclick = (ev) => { if (ev.target.id === 'etym-modal') $('#etym-modal').remove(); };
+    window.__attachModal($('#etym-modal'), $('#close-modal'), (e.headword || '').replace(/`/g, ''));
   }
   function row(label, val) {
     if (!val) return '';

@@ -165,17 +165,49 @@
           '<div class="flex justify-between items-start mb-3"><div class="min-w-0 flex-1">' +
             '<div class="text-2xl font-extrabold">' + esc(card.term) + '</div>' +
             fullInfo + '</div>' +
-            '<button id="vf-close" class="text-slate-400 ml-3"><i class="fas fa-xmark text-xl"></i></button></div>' +
+            '<button id="vf-close" class="vf-iconbtn vf-iconbtn-end text-slate-400" aria-label="閉じる"><i class="fas fa-xmark text-xl" aria-hidden="true"></i></button></div>' +
           '<div class="flex gap-2 text-xs mt-4 flex-wrap">' +
             '<span class="px-2 py-1 rounded-full bg-slate-800">' + stateLabel + '</span>' +
             (st && st.due ? '<span class="px-2 py-1 rounded-full bg-slate-800">次回: ' + new Date(st.due).toLocaleDateString('ja-JP') + '</span>' : '') +
             (st && st.lapses ? '<span class="px-2 py-1 rounded-full bg-rose-500/20 text-rose-300">間違い ' + st.lapses + '回</span>' : '') +
           '</div></div></div>';
     document.body.insertAdjacentHTML('beforeend', html);
-    document.getElementById('vf-close').onclick = () => document.getElementById('vf-modal').remove();
-    document.getElementById('vf-modal').onclick = e => { if (e.target.id === 'vf-modal') document.getElementById('vf-modal').remove(); };
+    window.__attachModal(document.getElementById('vf-modal'), document.getElementById('vf-close'), card.term);
     bindEtymChips(document.getElementById('vf-modal'));
   }
+
+  // モーダル共通の動き: 読み上げ用の役割を付け、閉じるボタンへフォーカスを移し、閉じたら元の場所へ戻す。
+  // 背景タップ・閉じるボタン・Esc のどれでも同じ close() で閉じる。
+  window.__attachModal = function (modal, closeBtn, label) {
+    if (!modal) return function () {};
+    const opener = document.activeElement;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    if (label) modal.setAttribute('aria-label', label);
+    const close = function () {
+      if (!modal.isConnected) return;
+      modal.remove();
+      if (opener && opener !== document.body && opener.isConnected && typeof opener.focus === 'function') {
+        try { opener.focus({ preventScroll: true }); } catch (e) {}
+      }
+    };
+    modal._vfClose = close;
+    if (closeBtn) closeBtn.onclick = close;
+    modal.onclick = function (e) { if (e.target === modal) close(); };
+    // 先頭のボタンではなくダイアログ自体にフォーカスする（読み上げにはラベルが読まれ、タップ時に枠が出ない）
+    modal.setAttribute('tabindex', '-1');
+    try { modal.focus({ preventScroll: true }); } catch (e) {}
+    return close;
+  };
+  // Esc: いちばん手前（最後に開いた）モーダルを閉じる
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const ms = document.querySelectorAll('#vf-modal, #etym-modal, #vf-karo-modal');
+    const top = ms[ms.length - 1];
+    if (!top) return;
+    e.preventDefault();
+    if (typeof top._vfClose === 'function') top._vfClose(); else top.remove();
+  });
 
   // 語源カードへのリンクチップ（タップで語源詳細モーダルを開く）
   function etymLinkChips(cardId) {
@@ -184,7 +216,7 @@
     return '<div class="flex flex-wrap gap-1.5 mt-2">' + list.map(e =>
       '<button data-etym-link="' + esc2(e.id) + '" class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 active:scale-95 transition">' +
         '<i class="fas fa-dna text-[9px]"></i>' + esc2((e.headword || '').split('（')[0]) +
-        '<span class="font-normal opacity-80">' + esc2((e.core || '').slice(0, 8)) + '</span></button>').join('') + '</div>';
+        '<span class="font-normal">' + esc2((e.core || '').slice(0, 8)) + '</span></button>').join('') + '</div>';
   }
   window.__etymLinkChips = etymLinkChips;
   function esc2(s){ return (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }

@@ -183,6 +183,9 @@
     document.body.insertAdjacentHTML('beforeend', html);
     const m = document.getElementById('vf-karo-modal');
     m.onclick = e => { if (e.target === m || e.target.closest('[data-karo-modal-close]')) closeGrowth(); };
+    m._vfClose = closeGrowth;
+    m.setAttribute('tabindex', '-1');
+    try { m.focus({ preventScroll: true }); } catch (e) {}
   }
 
   // 段階が上がっていれば、その段階を返す（初めて見る端末では、記録するだけで祝わない）

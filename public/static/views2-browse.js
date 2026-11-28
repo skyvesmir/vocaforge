@@ -41,9 +41,11 @@
     return '<div class="max-w-xl mx-auto pb-24 px-4 pt-6">' +
       '<h1 class="text-xl font-extrabold mb-3">語彙一覧</h1>' +
       // フラッシュカードモード入口
-      '<button id="flash-entry" class="w-full mb-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-2xl py-3.5 px-4 flex items-center justify-between active:scale-[0.99] transition shadow-lg shadow-amber-900/30">' +
-        '<span class="flex items-center gap-2"><i class="fas fa-clone text-lg"></i>フラッシュカードモード</span>' +
-        '<span class="text-xs font-normal opacity-90">セクションを選んでめくる <i class="fas fa-chevron-right ml-1"></i></span>' +
+      '<button id="flash-entry" class="w-full mb-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl py-3 px-4 flex items-center gap-3 text-left active:scale-[0.99] transition shadow-lg shadow-amber-900/30">' +
+        '<i class="fas fa-clone text-xl shrink-0" aria-hidden="true"></i>' +
+        '<span class="flex-1 min-w-0"><span class="block font-bold">フラッシュカードモード</span>' +
+          '<span class="block text-xs font-normal opacity-90">セクションを選んでめくる</span></span>' +
+        '<i class="fas fa-chevron-right shrink-0 opacity-90" aria-hidden="true"></i>' +
       '</button>' +
       '<div class="flex gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar">' + tabBtn + '</div>' +
       '<div class="relative mb-3"><i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>' +
